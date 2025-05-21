@@ -229,10 +229,9 @@
 
             initializeGame();
 
-            // Reset camera position immediately to match player
-            // This prevents checkFallen from triggering immediately on game restart
-            cameraX = 0;
-            cameraY = initialCameraY;
+            // Set grace period to prevent false game over detection
+            // during camera's smooth transition back to start position
+            fallenCheckGracePeriod = 120; // About 2 seconds at 60fps
             
             console.log("[DEBUG] ✔ initializeGame() done  |  after-init:", {
               gameState,
@@ -384,6 +383,9 @@
       let lastPerformanceCheck = 0;
       let performanceCheckInterval = 60; // Check every 60 frames
       let isInitialPerformanceDetected = false;
+      
+      // Add fall protection grace period after restart
+      let fallenCheckGracePeriod = 0;
       
       // Create a particle pool for more efficient memory usage
       const PARTICLE_POOL_SIZE = 200;
@@ -640,6 +642,7 @@
         jumpBufferTimer = 0;
         tagTimer = TAG_TIMER_MAX;
         previousJumpState = false;
+        fallenCheckGracePeriod = 0; // Reset grace period for normal game start
 
         player = {
           x: 100,
@@ -1030,7 +1033,7 @@
         // Setup for debug text
         push();
         fill(0, 0, 0, 180);
-        rect(10, 10, 250, 210); // Made taller for additional performance info
+        rect(10, 10, 250, 230); // Made taller for fall protection info
 
         // FPS display color based on performance
         if (lowPerformanceMode) {
@@ -1084,6 +1087,12 @@
 
         // Player position
         text(`Player pos: ${Math.round(player.x)}, ${Math.round(player.y)}`, 20, 180);
+        
+        // Fall protection status
+        if (fallenCheckGracePeriod > 0) {
+          fill(0, 255, 0);  // Bright green for active protection
+          text(`Fall Protection: ACTIVE (${fallenCheckGracePeriod})`, 20, 200);
+        }
 
         pop();
 
@@ -2933,8 +2942,14 @@
 
       function checkFallen() {
         // Only check if the game is actually in a playing state
-        // This prevents false game overs during game reset
+        // This prevents false game overs during game state transitions
         if (gameState !== "playing") return;
+        
+        // Skip check during grace period after restart
+        if (fallenCheckGracePeriod > 0) {
+          fallenCheckGracePeriod--;
+          return;
+        }
         
         // if player falls off bottom of screen…
         if (player.y - player.height / 2 > cameraY + height * 2) {
