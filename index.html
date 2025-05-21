@@ -1,0 +1,2910 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- ensure mobile viewport sizing -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Platformer Game</title>
+    <!-- p5.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <!-- Farcade SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@farcade/game-sdk@latest/dist/index.min.js"></script>
+    <!-- Keyboard Input Tracker (Inline) -->
+    <script>
+      // KeyTracker - A simple module to track key states regardless of canvas focus
+      class KeyTracker {
+        constructor() {
+          this.keys = {};
+          this._setupEventListeners();
+        }
+
+        // Set up global keyboard listeners
+        _setupEventListeners() {
+          // Track key down events
+          window.addEventListener("keydown", (e) => {
+            this.keys[e.keyCode] = true;
+            this.keys[e.key.toLowerCase()] = true;
+          });
+
+          // Track key up events
+          window.addEventListener("keyup", (e) => {
+            this.keys[e.keyCode] = false;
+            this.keys[e.key.toLowerCase()] = false;
+          });
+
+          // Clear keys when window loses focus
+          window.addEventListener("blur", () => {
+            this.keys = {};
+          });
+        }
+
+        // Check if a key is pressed
+        isKeyDown(keyCode) {
+          // Accept either key codes or key strings
+          if (typeof keyCode === "string") {
+            return this.keys[keyCode.toLowerCase()] === true;
+          }
+          return this.keys[keyCode] === true;
+        }
+      }
+
+      // Create a singleton instance
+      const keyTracker = new KeyTracker();
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #333;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: none;
+        -ms-touch-action: none;
+      }
+
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .game-container {
+        width: 100%;
+        max-width: 500px;
+        aspect-ratio: 500/800;
+        position: relative;
+      }
+
+      .game-container canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: none;
+        -ms-touch-action: none;
+      }
+
+      /* Prevent text selection via dragging */
+      * {
+        -webkit-user-drag: none;
+        -moz-user-drag: none;
+        user-drag: none;
+      }
+      /* Custom loading screen styles */
+      .p5_loading {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex !important;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: #63a0f9;
+        z-index: 1000;
+        color: white;
+        font-family: Arial, sans-serif;
+      }
+
+      .loading-title {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+      }
+
+      .loading-bar-container {
+        width: 80%;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .loading-bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(to right, #ffc110, #ff1ad2);
+        border-radius: 10px;
+        transition: width 0.3s ease;
+      }
+
+      .loading-text {
+        margin-top: 0.5rem;
+        font-size: 1rem;
+      }
+
+      /* Loading animation */
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-10px);
+        }
+      }
+
+      .loading-character {
+        margin: 20px 0;
+        animation: bounce 1.5s infinite ease-in-out;
+      }
+
+      /* Fade-out transition when loaded */
+      .p5_loading {
+        transition: opacity 0.5s ease-out;
+      }
+
+      .p5_loading.loaded {
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="game-container" id="game-container">
+      <!-- Custom loading screen -->
+      <div id="p5_loading" class="p5_loading">
+        <div class="loading-title">PLATFORMER ADVENTURE</div>
+        <div class="loading-character">
+          <!-- Simple character placeholder -->
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="8" width="28" height="32" rx="4" fill="#FFD700" />
+            <circle cx="20" cy="20" r="4" fill="#000" />
+            <circle cx="28" cy="20" r="4" fill="#000" />
+            <path d="M18 30C20 34 28 34 30 30" stroke="#000" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="loading-bar-container">
+          <div id="loading-progress-bar" class="loading-bar"></div>
+        </div>
+        <div id="loading-text" class="loading-text">Loading game assets...</div>
+      </div>
+    </div>
+    <script>
+      // ── STATE‑WATCHER SETUP ──
+      let _prevState = "";
+
+      // Debounce for throw mechanic
+      let lastThrowTime = 0;
+      const THROW_COOLDOWN = 300; // milliseconds between throws
+
+      // Track which touch/click events have already been processed
+      let activeTouchIds = {};
+
+      // Custom map function to ensure it's available even if p5.js map function isn't
+      function customMap(value, start1, stop1, start2, stop2) {
+        // Make sure we don't divide by zero
+        if (stop1 === start1) return start2;
+        // Calculate the mapped value using the correct formula
+        return start2 + (stop2 - start2) * ((value - start1) / (stop1 - start1));
+      }
+
+      // — Farcade SDK event handlers —
+      if (window.FarcadeSDK) {
+        window.FarcadeSDK.on("play_again", () => {
+          console.log("[DEBUG] ▶ play_again fired  |  pre-cleanup:", {
+            gameState,
+            score,
+            noggles: noggles.length,
+            things: things.length,
+          });
+
+          cleanupGame(() => {
+            console.log("[DEBUG] ✔ cleanupGame callback  |  post-cleanup:", {
+              gameState,
+              score,
+              noggles: noggles.length,
+              things: things.length,
+            });
+
+            initializeGame();
+
+            console.log("[DEBUG] ✔ initializeGame() done  |  after-init:", {
+              gameState,
+              score,
+              noggles: noggles.length,
+              things: things.length,
+            });
+
+            gameState = "playing";
+            console.log("[DEBUG] ✱ gameState set → playing");
+
+            // Add this line to restore focus to the canvas after reset
+            document.querySelector("canvas").focus();
+          });
+        });
+
+        window.FarcadeSDK.on("toggle_mute", ({ isMuted }) => {
+          setMuted && setMuted(isMuted);
+        });
+      }
+
+      function cleanupGame(cb) {
+        console.log("[DEBUG] → cleanupGame START", {
+          score,
+          noggles: noggles.length,
+          things: things.length,
+        });
+
+        // your existing teardown…
+        noggles.length = 0;
+        things.length = 0;
+        platforms.length = 0;
+        clouds.length = 0;
+
+        score = 0;
+        coyoteTimer = 0;
+        jumpBufferTimer = 0;
+        tagTimer = TAG_TIMER_MAX;
+
+        // (clear any timeouts/intervals here)
+
+        console.log("[DEBUG] ← cleanupGame END", {
+          score,
+          noggles: noggles.length,
+          things: things.length,
+        });
+
+        if (typeof cb === "function") cb();
+      }
+
+      // — CONFIGURATION —
+      const LEVEL_LENGTH = 100000;
+      const MIN_PLAT_WIDTH = 150;
+      const MAX_PLAT_WIDTH = 300;
+      const MIN_GAP = 100;
+      const MAX_GAP = 245;
+      const DIFFICULTY_SCALE = 5;
+      const PLAYER_MAX_JUMP_DIST = 330;
+      const PLAYER_MAX_JUMP_HEIGHT = 190;
+      const NOGGLE_MAX_DISTANCE = 300;
+      const NOGGLE_MAX_SPEED = 20;
+      const NOGGLE_GRAVITY = 0.45;
+
+      // Define zones for platform introductions (as percentages of the total level length)
+      const INTRO_ZONES = {
+        normal: { start: 0, end: 0.01 }, // First 1% - only normal platforms
+        bouncy: { start: 0.01, end: 0.05 }, // 1-5% - introduce bouncy
+        moving: { start: 0.05, end: 0.1 }, // 5-10% - introduce moving
+        crumbling: { start: 0.15, end: 0.2 }, // 15-20% - introduce crumbling (adjusted position)
+        mixed: { start: 0.2, end: 1.0 }, // Final 80% - mix everything (expanded)
+      };
+
+      const brightPalettes = {
+        "Deep Fried": ["#B9185C", "#D22209", "#C16710", "#D08B11", "#FFE939"],
+        "User Gnome": ["#FF1A0B", "#EC5B43", "#FFA21E", "#00A556", "#068940"],
+        "Noun 1": ["#D26451", "#F78A18", "#FFC110", "#FF638D", "#CC0595"],
+        "Bold & Bright": ["#F20422", "#FF1AD2", "#FFC110", "#1929F4", "#00FCFF"],
+      };
+      const dullPalettes = {
+        "Cozy Cotton": ["#F9E8DD", "#F9F4E6", "#D7D3CD", "#CFC2AB", "#CBC1BC"],
+        "Muted Shades": ["#757576", "#58565C", "#5D6061", "#1F1D29", "#343235"],
+      };
+
+      const THING_BASE_SIZE = 120;
+      const THING_BOB_AMPLITUDE = 10;
+      const THING_BOB_SPEED = 0.05;
+
+      // Tag-or-Die game mechanic
+      const TAG_TIMER_MAX = 600; // 10 seconds at 60fps
+      const TAG_TIMER_WARNING = 300; // 5 seconds warning threshold
+
+      // sprite‑sheet setup
+      const SPRITE_SHEET_URL =
+        "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/spritesheet_things_80-VYQyfGsuWRfn5VjS8uiyEkpRIo7PXu.png";
+      const GREY_SPRITE_SHEET_URL =
+        "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/spritesheet_things_80_grey-EL90MwmI8yNVOFHmv7p0srC7YMfWfD.png";
+      const THING_FRAME_SIZE = 64;
+      const THING_FRAMES_PER_ROW = 20;
+      const TOTAL_THING_ROWS = 4;
+      const TOTAL_THING_FRAMES = THING_FRAMES_PER_ROW * TOTAL_THING_ROWS;
+
+      // Particle system optimization
+      const MAX_PARTICLES = 120; // Maximum particles allowed at once
+      const PARTICLE_CULLING_DISTANCE = 1000; // Remove particles far from view
+
+      // animation constants
+      const FRAME_WIDTH = 48,
+        FRAME_HEIGHT = 48;
+      const ANIMATION_DEFS = {
+        idle: { frames: 16, speed: 8 },
+        walk: { frames: 8, speed: 6 },
+        jump: { frames: 8, speed: 7 },
+        fall: { frames: 8, speed: 7 },
+      };
+      const ANIMATION_MAP = {
+        idle: { right: { row: 4, startFrame: 0 }, left: { row: 6, startFrame: 0 } },
+        walk: { right: { row: 0, startFrame: 0 }, left: { row: 2, startFrame: 0 } },
+        jump: { right: { row: 0, startFrame: 8 }, left: { row: 2, startFrame: 8 } },
+        fall: { right: { row: 0, startFrame: 8 }, left: { row: 2, startFrame: 8 } },
+      };
+
+      // — STATE —
+      let cloudImg,
+        clouds = [];
+      let joystick = { x: 0, y: 0, outer: 60, inner: 30, activeRadius: 150 };
+      let jumpBtn = { x: 0, y: 0, r: 80 };
+      let cameraX = 0,
+        cameraY = 0,
+        initialCameraY = 0;
+      let noggles = [],
+        things = [],
+        score = 0;
+      let particles = [];
+      let platforms = [],
+        goal,
+        levelWidth,
+        gameState;
+      let player, nounSpriteSheet, noggleImg, thingSpriteSheet, thingSpriteSheetGrey;
+      let coyoteTimer = 0,
+        jumpBufferTimer = 0,
+        tagTimer = TAG_TIMER_MAX,
+        previousJumpState = false; // Track jump button state for edge detection
+
+      // Debug mode variables
+      let debugMode = false;
+      let frameRateHistory = [];
+      let frameRateUpdateTimer = 0;
+
+      // Help system for platform types
+      let helpTexts = {
+        crumbling: { shown: false, text: "NEW! Crumbling platforms fall after you step on them!" },
+        moving: { shown: false, text: "NEW! These blue platforms move left and right!" },
+        bouncy: { shown: false, text: "NEW! Yellow platforms give you an extra boost!" },
+      };
+
+      // Track if each platform type has had a tutorial platform
+      let tutorialShown = {
+        crumbling: false,
+        moving: false,
+        bouncy: false,
+      };
+
+      let titleBg;
+      // Track loading progress
+      let loadingProgress = 0;
+      let totalAssets = 6; // Total number of assets to load (including greyscale sprite sheet)
+      let assetsLoaded = 0;
+
+      // Function to update the loading progress UI
+      function updateLoadingProgress(increment = 1) {
+        assetsLoaded += increment;
+        loadingProgress = (assetsLoaded / totalAssets) * 100;
+
+        // Update the loading bar
+        const progressBar = document.getElementById("loading-progress-bar");
+        const loadingText = document.getElementById("loading-text");
+
+        if (progressBar) {
+          progressBar.style.width = loadingProgress + "%";
+        }
+
+        if (loadingText) {
+          if (loadingProgress < 100) {
+            loadingText.textContent = `Loading game assets... ${Math.floor(loadingProgress)}%`;
+          } else {
+            loadingText.textContent = "Ready to play!";
+          }
+        }
+      }
+
+      function preload() {
+        // Start by showing zero progress
+        updateLoadingProgress(0);
+
+        // Load each asset with a callback to update progress
+        nounSpriteSheet = loadImage(
+          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/myNounsSpritesheet_003-ymLtEkBrlNZMQkj37npozrPDdamMbF.png",
+          () => updateLoadingProgress(),
+        );
+
+        noggleImg = loadImage(
+          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/glasses-square-red-ge40H7EEizX6BtKLM99M270Y9htR9s.png",
+          () => updateLoadingProgress(),
+        );
+
+        cloudImg = loadImage(
+          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/head-cloud-i9zXsgKYOqRd5S0VjKaziZYVDtZbmf.png",
+          () => updateLoadingProgress(),
+        );
+
+        thingSpriteSheet = loadImage(SPRITE_SHEET_URL, () => updateLoadingProgress());
+        thingSpriteSheetGrey = loadImage(GREY_SPRITE_SHEET_URL, () => updateLoadingProgress());
+
+        titleBg = loadImage(
+          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/nounifyTheWorldTitle_1-0Wbv9O9w8f1mM12NI9CssOfFIRXlKt.png",
+          () => updateLoadingProgress(),
+        );
+      }
+
+      function setup() {
+        pixelDensity(window.devicePixelRatio || 1);
+        let cnv = createCanvas(500, 800).parent("game-container");
+        cnv.elt.removeAttribute("style");
+
+        // Add this line to make the canvas focusable
+        cnv.elt.setAttribute("tabindex", "0");
+
+        // Initially focus the canvas to ensure keyboard input works from the start
+        cnv.elt.focus();
+
+        // Handle canvas click events to ensure focus is regained
+        cnv.elt.addEventListener("click", function () {
+          cnv.elt.focus();
+        });
+
+        // Add event for window focus to prevent stuck keys
+        window.addEventListener("focus", function () {
+          // Reset any potentially stuck keys by using the keyTracker
+          document.querySelector("canvas").focus();
+        });
+
+        // Make sure loading screen is properly hidden
+        const loadingScreen = document.getElementById("p5_loading");
+        if (loadingScreen) {
+          // Add a "loaded" class for smooth transition
+          loadingScreen.classList.add("loaded");
+
+          // Then remove the element after transition completes
+          setTimeout(() => {
+            loadingScreen.style.display = "none";
+          }, 500);
+        }
+
+        noSmooth();
+        textAlign(CENTER, CENTER);
+        imageMode(CENTER);
+        colorMode(RGB, 255);
+
+        initializeGame();
+        // Position the player lower on the screen (show more ahead)
+        initialCameraY = player.y - height * 0.7; // Changed from height/2
+        cameraY = initialCameraY;
+        joystick.x = 80;
+        joystick.y = height - 80;
+        jumpBtn.x = width - 80;
+        jumpBtn.y = height - 80;
+
+        if (window.FarcadeSDK?.singlePlayer) {
+          window.FarcadeSDK.singlePlayer.actions.ready();
+        }
+      }
+
+      function initializeGame() {
+        console.log("[DEBUG] → initializeGame START");
+        randomSeed(millis());
+        const dullKeys = Object.keys(dullPalettes),
+          brightKeys = Object.keys(brightPalettes);
+        activeDullPalette = dullPalettes[dullKeys[floor(random(dullKeys.length))]];
+        activeBrightPalette = brightPalettes[brightKeys[floor(random(brightKeys.length))]];
+
+        noggles = [];
+        score = 0;
+        coyoteTimer = 0;
+        jumpBufferTimer = 0;
+        tagTimer = TAG_TIMER_MAX;
+        previousJumpState = false;
+
+        player = {
+          x: 100,
+          y: height - 100,
+          width: FRAME_WIDTH,
+          height: FRAME_HEIGHT,
+          velocityX: 0,
+          velocityY: 0,
+          isOnGround: false,
+          wasOnGround: false,
+          jumpSquash: 0,
+          throwSquash: 0,
+          spriteSheet: nounSpriteSheet,
+          animation: { currentSet: "idle", facingDirection: 1, frameIndex: 0, tick: 0 },
+          platformBelow: null, // Add tracking for the current platform the player is on
+        };
+
+        // Reset the target camera position but don't immediately set the actual camera position
+        // This allows the camera to smoothly travel back to the start
+        // Position the player at about 2/3 down the screen instead of center
+        initialCameraY = player.y - height * 0.7; // Changed from height/2 to height*0.7
+
+        // Don't immediately reset camera position, let it lerp in updateCamera()
+        // cameraY = initialCameraY;
+        // cameraX = 0;
+
+        platforms = [
+          {
+            x: 0,
+            y: height - 50,
+            w: 400,
+            h: 50,
+            color: activeDullPalette[floor(random(activeDullPalette.length))],
+            type: "normal",
+          },
+        ];
+
+        let xPos = 400,
+          prevY = height - 50,
+          chunkIdx = 0;
+        while (xPos < LEVEL_LENGTH) {
+          let d = min(chunkIdx / DIFFICULTY_SCALE, 1),
+            gap = lerp(MIN_GAP, MAX_GAP, d);
+          xPos += random(gap * 0.8, gap * 1.2);
+          let platW = random(MIN_PLAT_WIDTH, lerp(MAX_PLAT_WIDTH, MIN_PLAT_WIDTH, d)),
+            vertRange = lerp(PLAYER_MAX_JUMP_HEIGHT * 0.5, PLAYER_MAX_JUMP_HEIGHT, d),
+            newY = constrain(prevY + random(-vertRange, vertRange), 100, height - 150);
+          // Determine platform type using distance-based progression
+          let platformType = "normal";
+          let platformIsTutorial = false;
+
+          // Calculate current level progress as percentage of total level length
+          const levelProgress = xPos / LEVEL_LENGTH;
+
+          // Determine available platform types based on current level progress
+          const availableTypes = ["normal"]; // Always include normal platforms
+          if (levelProgress >= INTRO_ZONES.bouncy.start) availableTypes.push("bouncy");
+          if (levelProgress >= INTRO_ZONES.moving.start) availableTypes.push("moving");
+          if (levelProgress >= INTRO_ZONES.crumbling.start) availableTypes.push("crumbling");
+
+          // Each zone specifically introduces and features one platform type
+          if (levelProgress < INTRO_ZONES.bouncy.start) {
+            // Beginning area: Always normal platforms
+            platformType = "normal";
+          } else if (levelProgress < INTRO_ZONES.moving.start) {
+            // Bouncy introduction zone (first 10%-25%)
+            const zoneProgress =
+              (levelProgress - INTRO_ZONES.bouncy.start) / (INTRO_ZONES.bouncy.end - INTRO_ZONES.bouncy.start);
+
+            // Higher chance of bouncy platforms as player progresses through zone
+            const bouncyChance = 0.3 + zoneProgress * 0.2; // 30% to 50% chance
+
+            // Choose platform type with weighted probability
+            platformType = random() < bouncyChance ? "bouncy" : "normal";
+
+            // Force tutorial platform at the beginning of the bouncy zone
+            if (!tutorialShown.bouncy && levelProgress < INTRO_ZONES.bouncy.start + 0.02) {
+              platformType = "bouncy";
+              tutorialShown.bouncy = true;
+              platformIsTutorial = true;
+            }
+          } else if (levelProgress < INTRO_ZONES.crumbling.start) {
+            // Moving platforms zone (5%-15%)
+            const typeRoll = random();
+
+            if (typeRoll < 0.4) {
+              platformType = "moving";
+            } else if (typeRoll < 0.6) {
+              platformType = "bouncy";
+            } else {
+              platformType = "normal";
+            }
+
+            // Force tutorial platform at the beginning of the moving zone
+            if (!tutorialShown.moving && levelProgress < INTRO_ZONES.moving.start + 0.02) {
+              platformType = "moving";
+              tutorialShown.moving = true;
+              platformIsTutorial = true;
+            }
+          } else if (levelProgress < INTRO_ZONES.mixed.start) {
+            // Crumbling platforms zone (15%-20%)
+            const typeRoll = random();
+
+            if (typeRoll < 0.3) {
+              platformType = "crumbling";
+            } else if (typeRoll < 0.5) {
+              platformType = "moving";
+            } else if (typeRoll < 0.75) {
+              platformType = "bouncy";
+            } else {
+              platformType = "normal";
+            }
+
+            // Force tutorial platform at the beginning of the crumbling zone
+            if (!tutorialShown.crumbling && levelProgress < INTRO_ZONES.crumbling.start + 0.02) {
+              platformType = "crumbling";
+              tutorialShown.crumbling = true;
+              platformIsTutorial = true;
+            }
+          } else {
+            // Final mixed zone (90%-100%): balanced mix of all platform types
+            // Use a more sophisticated distribution with increasing difficulty
+            const finalZoneProgress =
+              (levelProgress - INTRO_ZONES.mixed.start) / (INTRO_ZONES.mixed.end - INTRO_ZONES.mixed.start);
+
+            // Gradually decrease normal platforms, increase special platforms
+            const normalChance = 0.3 - finalZoneProgress * 0.2; // 30% down to 10%
+            const typeRoll = random();
+
+            if (typeRoll < normalChance) {
+              platformType = "normal";
+            } else {
+              // Select randomly from all special platform types
+              const specialTypes = ["bouncy", "moving", "crumbling"];
+              platformType = specialTypes[Math.floor(random() * specialTypes.length)];
+            }
+
+            // In the final zone, occasionally create challenging platform sequences
+            if (platforms.length > 0 && random() < 0.4) {
+              const prevPlatform = platforms[platforms.length - 1];
+              if (prevPlatform.type !== "normal") {
+                // 40% chance to repeat the previous platform type for increased challenge
+                platformType = prevPlatform.type;
+              }
+            }
+          }
+
+          // Calculate zone-based difficulty scaling factors (0-1 range)
+          const zoneProgress = levelProgress / INTRO_ZONES.mixed.start; // 0-1 over the course of the main zones
+          const difficultyFactor = min(zoneProgress * 1.2, 1); // Cap at 1.0, but ramp up slightly faster
+
+          // Create the platform with type-specific properties
+          let platform = {
+            x: xPos,
+            y: newY,
+            w: platW,
+            h: 20,
+            color: activeDullPalette[floor(random(activeDullPalette.length))],
+            type: platformType,
+            isTutorial: platformIsTutorial,
+            zoneDifficulty: zoneProgress, // Store the zone difficulty for visual indicators
+          };
+
+          // Add type-specific properties that scale with zone progression
+          switch (platformType) {
+            case "crumbling":
+              // Make platforms crumble faster as game progresses
+              const baseMax = platformIsTutorial ? 240 : 60; // Tutorial platforms last a bit longer
+              const minMax = 60; // Minimum frames before collapse at max difficulty
+              platform.crumbleTimer = -1; // -1 means not triggered yet
+              platform.crumbleMax = round(lerp(baseMax, minMax, difficultyFactor));
+              platform.originalColor = platform.color;
+
+              // Set special color for tutorial platform
+              if (platformIsTutorial) {
+                platform.color = color(220, 170, 120); // More distinctive color
+              }
+              break;
+
+            // Vertical platform type has been removed
+
+            case "moving":
+              platform.startX = xPos;
+              platform.startY = newY;
+              // Initialize prevX to current position to avoid first frame jumps
+              platform.prevX = xPos;
+
+              if (platformIsTutorial) {
+                // Tutorial moving platforms move slower and less distance
+                platform.amplitude = 70;
+                platform.speed = 0.015;
+              } else {
+                // Increase movement range and speed as game progresses
+                const baseAmplitude = 50;
+                const maxAmplitude = 150;
+                platform.amplitude = lerp(baseAmplitude, maxAmplitude, difficultyFactor);
+
+                const baseSpeed = 0.01;
+                const maxSpeed = 0.04;
+                platform.speed = lerp(baseSpeed, maxSpeed, difficultyFactor);
+
+                // All moving platforms use the standard blue color
+                platform.color = color(80, 180, 255); // Standard blue
+              }
+
+              platform.phase = random(TWO_PI);
+
+              // Set special color for tutorial platform
+              if (platformIsTutorial) {
+                platform.color = color(100, 200, 255); // Brighter blue for tutorial
+              }
+              break;
+
+            case "bouncy":
+              if (platformIsTutorial) {
+                // Tutorial bouncy platforms are more predictable
+                platform.bounceFactor = 1.3; // Consistent 30% boost
+              } else {
+                // Increase bounce height as game progresses
+                const baseBounce = 1.2; // 20% boost at start
+                const maxBounce = 1.5; // 50% boost at end
+                platform.bounceFactor = lerp(baseBounce, maxBounce, difficultyFactor);
+              }
+
+              platform.springCompression = 0;
+
+              // Use a more springy color (yellowish), brighter for tutorial
+              platform.color = platformIsTutorial
+                ? color(255, 255, 80) // Bright yellow for tutorial
+                : color(255, 240, 80); // Standard yellow
+              break;
+
+            case "normal":
+              // Even normal platforms get some visual treatment if they're tutorial platforms
+              if (platformIsTutorial) {
+                platform.color = color(220, 220, 220); // Brighter
+              }
+              break;
+          }
+
+          platforms.push(platform);
+          prevY = newY;
+          xPos += platW;
+          chunkIdx++;
+        }
+        levelWidth = xPos + 500;
+
+        goal = {
+          x: levelWidth - 200,
+          y: random(height / 2, height - 200),
+          w: 50,
+          h: 50,
+          color: activeBrightPalette[floor(random(activeBrightPalette.length))],
+        };
+
+        // Get player's current viewport for determining thing positions
+        const playerViewportTop = player.y - height / 2;
+
+        things = platforms
+          .filter((_, i) => i % 3 === 0)
+          .map((p) => {
+            // compute spawn x position randomly on the platform
+            const tx = random(p.x + 10, p.x + p.w - 10);
+
+            // Always position things relative to player viewport (60-200px above player's head)
+            const minY = playerViewportTop + 60;
+            const maxY = playerViewportTop + 200;
+            const ty = random(minY, maxY);
+
+            // pick a random frame index
+            const idx = floor(random(TOTAL_THING_FRAMES));
+
+            return {
+              x: tx,
+              y: ty,
+              size: THING_BASE_SIZE,
+              phase: random(TWO_PI),
+              frameIndex: idx,
+              collected: false,
+            };
+          });
+
+        clouds = Array.from({ length: 20 }, () => ({
+          x: random(0, levelWidth),
+          y: random(50, height / 2),
+          size: random(0.5, 1.5),
+          speedFactor: random(0.2, 0.5),
+        }));
+
+        gameState = "start";
+        console.log("[DEBUG] ← initializeGame END", {
+          score,
+          noggles: noggles.length,
+          things: things.length,
+          platforms: platforms.length,
+          clouds: clouds.length,
+        });
+
+        // Ensure canvas gets focus to capture keyboard events
+        setTimeout(() => {
+          document.querySelector("canvas").focus();
+        }, 100);
+      }
+
+      function draw() {
+        // ── log whenever gameState changes ──
+        if (gameState !== _prevState) {
+          console.log(`[DEBUG] STATE: ${_prevState} → ${gameState}`);
+          _prevState = gameState;
+        }
+        background("#63A0F9");
+        drawClouds();
+
+        if (gameState === "start") {
+          displayStartScreen();
+        } else if (gameState === "playing") {
+          runGame();
+          drawUI();
+        } else {
+          // either "gameOver" or "win"
+          drawGameScene();
+          if (window.FarcadeSDK?.singlePlayer) {
+            window.FarcadeSDK.singlePlayer.actions.gameOver({ score });
+          }
+        }
+
+        // Draw debug info if debug mode is enabled
+        if (debugMode) {
+          drawDebugInfo();
+        }
+      }
+
+      // Function to draw debug information
+      function drawDebugInfo() {
+        // Calculate frame rate every 10 frames
+        frameRateUpdateTimer++;
+        if (frameRateUpdateTimer >= 10) {
+          frameRateUpdateTimer = 0;
+          frameRateHistory.push(frameRate());
+          if (frameRateHistory.length > 10) {
+            frameRateHistory.shift();
+          }
+        }
+
+        // Calculate average FPS over the history
+        const avgFps =
+          frameRateHistory.length > 0
+            ? frameRateHistory.reduce((a, b) => a + b, 0) / frameRateHistory.length
+            : frameRate();
+
+        // Check if low performance mode is active
+        const lowPerformanceMode = avgFps < 40;
+
+        // Setup for debug text
+        push();
+        fill(0, 0, 0, 180);
+        rect(10, 10, 200, 170); // Made taller for additional info
+
+        // FPS display color based on performance
+        if (lowPerformanceMode) {
+          fill(255, 100, 100); // Red for low performance
+        } else {
+          fill(100, 255, 100); // Green for good performance
+        }
+
+        textAlign(LEFT, TOP);
+        textSize(14);
+
+        // Display FPS
+        text(`FPS: ${avgFps.toFixed(1)}`, 20, 20);
+
+        // Performance mode indicator
+        if (lowPerformanceMode) {
+          text("LOW PERFORMANCE MODE ACTIVE", 20, 40);
+        } else {
+          text("Performance: GOOD", 20, 40);
+        }
+
+        fill(255, 255, 0); // Yellow for other debug info
+
+        // Display current position in level
+        const levelProgress = player.x / LEVEL_LENGTH;
+        text(`Level progress: ${(levelProgress * 100).toFixed(2)}%`, 20, 60);
+
+        // Display current zone
+        let currentZone = "Normal";
+        if (levelProgress >= INTRO_ZONES.crumbling.start) currentZone = "Crumbling";
+        else if (levelProgress >= INTRO_ZONES.moving.start) currentZone = "Moving";
+        else if (levelProgress >= INTRO_ZONES.bouncy.start) currentZone = "Bouncy";
+        text(`Current zone: ${currentZone}`, 20, 80);
+
+        // Player position
+        text(`Player pos: ${Math.round(player.x)}, ${Math.round(player.y)}`, 20, 100);
+
+        // Controls help
+        text("Debug Controls:", 20, 120);
+        text("D: Toggle debug mode", 20, 140);
+        text("1-5: Teleport to zones", 20, 160);
+
+        pop();
+
+        // Draw zone boundaries as vertical lines on screen
+        push();
+        translate(-cameraX, -cameraY);
+        strokeWeight(3);
+        stroke(255, 255, 0, 100);
+
+        // Draw line for each zone boundary
+        for (const zone in INTRO_ZONES) {
+          if (INTRO_ZONES[zone].start > 0) {
+            const boundaryX = LEVEL_LENGTH * INTRO_ZONES[zone].start;
+            line(boundaryX, cameraY, boundaryX, cameraY + height);
+
+            // Add zone label
+            fill(255, 255, 0);
+            noStroke();
+            textSize(16);
+            text(zone, boundaryX + 10, cameraY + 50);
+          }
+        }
+        pop();
+      }
+
+      function runGame() {
+        // Collect all inputs first
+        const inputs = collectInputs();
+
+        // Process jump buffer and coyote time
+        updateJumpState();
+
+        // Apply movement physics based on inputs
+        applyMovementPhysics(inputs);
+
+        // Handle other player input (jumping, throwing)
+        // handlePlayerInput(inputs);
+
+        // Regular physics and collision updates
+        updatePlayer();
+        updatePlayerAnimationState();
+        advancePlayerFrame();
+
+        // Camera and visual updates after physics
+        updateCamera();
+        updateTagTimer();
+        drawGameScene();
+        updateNoggles();
+
+        // Win/loss conditions
+        checkGoal();
+        checkFallen();
+      }
+
+      function updateTagTimer() {
+        tagTimer--;
+        if (tagTimer <= 0) {
+          console.log("[DEBUG] tagTimer expired → gameOver", {
+            score,
+            gameStateBefore: gameState,
+          });
+          gameState = "gameOver";
+        }
+      }
+
+      function updateCamera() {
+        // Show more horizontal space by moving camera more gently
+        const tx = player.x - width * 0.35;
+        cameraX = constrain(lerp(cameraX, tx, 0.05), 0, max(levelWidth - width, 0)); // Reduced from 0.1 to 0.05
+
+        // Use more relaxed vertical thresholds to reduce camera movement
+        const lookDownThreshold = height * 0.6; // Increased from 0.55 to 0.6
+        const lookUpThreshold = height * 0.3; // Decreased from 0.35 to 0.3
+
+        // Calculate the player's position on screen
+        const playerScreenY = player.y - cameraY;
+
+        // Determine target camera Y position with more relaxed rules
+        let targetY = cameraY; // Default to keeping current position
+
+        // Only move camera if player is significantly outside comfort zone
+        if (playerScreenY > lookDownThreshold && player.velocityY > 2) {
+          // Only look down when falling with some velocity and well below threshold
+          targetY = player.y - lookDownThreshold + player.velocityY * 1.5; // Reduced from 3 to 1.5
+        }
+        // Only move camera up if player is significantly above the threshold
+        else if (playerScreenY < lookUpThreshold) {
+          targetY = player.y - lookUpThreshold;
+        }
+
+        // Apply much slower vertical camera movement
+        const verticalLerpFactor = player.velocityY > 5 ? 0.04 : 0.01; // Reduced from 0.08/0.02 to 0.04/0.01
+
+        // Add a deadzone where camera doesn't move at all for small changes
+        if (Math.abs(targetY - cameraY) > 5) {
+          cameraY = lerp(cameraY, targetY, verticalLerpFactor);
+        }
+
+        // Add damping to smooth out any jerkiness
+        player.lastCameraY = player.lastCameraY || cameraY;
+        const cameraDelta = cameraY - player.lastCameraY;
+
+        // If camera is moving too quickly, apply additional damping
+        if (Math.abs(cameraDelta) > 10) {
+          cameraY = player.lastCameraY + cameraDelta * 0.7; // Dampen sudden large movements
+        }
+
+        player.lastCameraY = cameraY;
+
+        // Keep the camera from going higher than the initial position
+        cameraY = min(cameraY, initialCameraY);
+      }
+
+      function updateAndDrawParticles() {
+        // Enforce particle limit before processing
+        if (particles.length > MAX_PARTICLES) {
+          // Remove oldest particles when over limit
+          particles.splice(0, particles.length - MAX_PARTICLES);
+        }
+
+        // Get current performance level
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 40;
+
+        push();
+        translate(-cameraX, -cameraY);
+        noStroke();
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+
+          // Cull distant particles that aren't visible
+          if (
+            p.x < cameraX - PARTICLE_CULLING_DISTANCE ||
+            p.x > cameraX + width + PARTICLE_CULLING_DISTANCE ||
+            p.y < cameraY - PARTICLE_CULLING_DISTANCE ||
+            p.y > cameraY + height + PARTICLE_CULLING_DISTANCE
+          ) {
+            particles.splice(i, 1);
+            continue;
+          }
+
+          // Update particle position
+          p.x += p.vx;
+          p.y += p.vy;
+
+          // Apply physics and behaviors based on particle type
+          if (p.type === "debris") {
+            // Debris particles bounce slightly
+            if (p.y > height && p.vy > 0) {
+              p.vy = -p.vy * 0.4;
+              p.vx *= 0.8;
+            }
+            p.vy += 0.4; // Stronger gravity for debris
+            p.angle = (p.angle || 0) + p.rotationSpeed;
+          } else if (p.type === "sparkle") {
+            // Sparkles float and fade
+            p.size *= 0.95;
+            p.vy *= 0.95; // Slow down vertical movement
+          } else if (p.type === "text") {
+            // Text particles fade and float upward
+            p.vy *= 0.95;
+          } else {
+            // Default particle behavior
+            p.vy += 0.2; // Standard gravity
+          }
+
+          p.life -= 1;
+
+          if (p.life <= 0) {
+            particles.splice(i, 1);
+            continue;
+          }
+
+          // Calculate opacity based on lifespan
+          const maxLife = p.maxLife || 20;
+          const alpha = map(p.life, 0, maxLife, 0, 255);
+
+          // Draw different particle types
+          if (p.type === "debris") {
+            // Draw rectangular debris
+            push();
+            fill(red(p.color), green(p.color), blue(p.color), alpha);
+            translate(p.x, p.y);
+            rotate(p.angle || 0);
+            rect(0, 0, p.size, p.size);
+            pop();
+          } else if (p.type === "sparkle") {
+            // Reduce expensive shadow effects in low performance mode
+            if (!lowPerformanceMode) {
+              drawingContext.shadowBlur = p.size;
+              drawingContext.shadowColor = color(255, 255, 200, alpha);
+            }
+            fill(255, 255, 200, alpha);
+            circle(p.x, p.y, p.size);
+            if (!lowPerformanceMode) {
+              drawingContext.shadowBlur = 0;
+            }
+          } else {
+            // Draw standard circular particle
+            fill(red(p.color), green(p.color), blue(p.color), alpha);
+            circle(p.x, p.y, p.size);
+          }
+
+          // Draw text if particle has text property and not in low performance mode
+          if (p.text && (!lowPerformanceMode || p.type === "text")) {
+            fill(255, alpha);
+            textAlign(CENTER, CENTER);
+            textSize(p.textSize || 10);
+            text(p.text, p.x, p.y - (p.size + 5));
+            textAlign(CENTER, CENTER);
+          }
+        }
+        pop();
+      }
+
+      function drawGameScene() {
+        push();
+        translate(-cameraX, -cameraY);
+        drawPlatforms();
+        drawThings();
+        drawGoal();
+        drawPlayer();
+        drawNoggles();
+        pop();
+
+        // Draw particles after everything else
+        updateAndDrawParticles();
+
+        // Draw tag timer effects after everything else
+        if (gameState === "playing") {
+          drawTagCountdown();
+        }
+      }
+
+      // New function to draw the tag countdown visuals
+      function drawTagCountdown() {
+        if (tagTimer <= TAG_TIMER_WARNING) {
+          // Calculate desaturation intensity that grows as timer decreases
+          const desaturationIntensity = customMap(tagTimer, TAG_TIMER_WARNING, 0, 0, 1);
+          drawDesaturationEffect(desaturationIntensity);
+
+          // Draw countdown timer for last 5 seconds
+          const seconds = ceil(tagTimer / 60);
+          if (seconds <= 5) {
+            textAlign(CENTER, CENTER);
+            textSize(64);
+            // Make it flash when under 3 seconds
+            if (seconds > 2 || frameCount % 10 < 5) {
+              fill(255, 0, 0, 200);
+              text(seconds, width / 2, height / 3);
+            }
+          }
+        }
+
+        // Always show timer at the top
+        textAlign(CENTER, TOP);
+        textSize(20);
+        fill(255);
+        text(`Tag Timer: ${floor(tagTimer / 60)}`, width / 2, 40);
+      }
+
+      // Function to draw desaturation effect for countdown
+      function drawDesaturationEffect(intensity) {
+        if (intensity <= 0) return;
+
+        // Get current performance level
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 30;
+
+        // Calculate dimensions for gradients (these were missing!)
+        const minDim = min(width, height);
+        const maxDim = max(width, height);
+
+        push();
+        noStroke();
+        
+        // Use simplified effect when performance is low
+        if (lowPerformanceMode) {
+          // Simple white overlay with transparency for desaturation
+          fill(255, 255, 255, intensity * 120);
+          rect(0, 0, width, height);
+          
+          // Add a slight blue tint to make it feel colder
+          fill(200, 220, 255, intensity * 40);
+          rect(0, 0, width, height);
+          
+          pop();
+          return;
+        }
+        
+        // Draw a semi-transparent white overlay to desaturate
+        drawingContext.save();
+        
+        // Create a uniform desaturation effect
+        const desatAmount = intensity * 0.7;
+        fill(255, 255, 255, desatAmount * 150);
+        rect(0, 0, width, height);
+        
+        // Add a subtle blue-gray tint to make it feel washed out
+        fill(210, 220, 240, desatAmount * 80);
+        rect(0, 0, width, height);
+        
+        drawingContext.restore();
+
+        // Add subtle gradient effect for more emphasis at the edges
+        if (intensity > 0.3) {
+          drawingContext.save();
+          
+          // Create a radial gradient that's stronger at the edges
+          const gradient = drawingContext.createRadialGradient(
+            width / 2,
+            height / 2,
+            minDim * 0.1,
+            width / 2,
+            height / 2,
+            maxDim * 0.7,
+          );
+
+          const edgeIntensity = intensity * 0.9;
+          gradient.addColorStop(0, "rgba(255, 255, 255, 0)");
+          gradient.addColorStop(0.6, "rgba(255, 255, 255, " + edgeIntensity * 0.2 + ")");
+          gradient.addColorStop(1, "rgba(240, 248, 255, " + edgeIntensity * 0.5 + ")"); // Slight blue tint at edges
+
+          drawingContext.fillStyle = gradient;
+          drawingContext.globalAlpha = intensity;
+          drawingContext.fillRect(0, 0, width, height);
+          drawingContext.restore();
+          
+          // Add slight red warning tint for urgency when timer is critical
+          if (intensity > 0.7) {
+            drawingContext.save();
+            drawingContext.globalAlpha = customMap(intensity, 0.7, 1, 0, 0.15);
+            drawingContext.fillStyle = "rgba(255, 0, 0, 0.15)";
+            drawingContext.fillRect(0, 0, width, height);
+            drawingContext.restore();
+          }
+        }
+        
+        pop();
+      }
+
+      function drawClouds() {
+        imageMode(CENTER);
+        noTint();
+        clouds.forEach((c) => {
+          const sx = c.x - cameraX * c.speedFactor;
+          image(cloudImg, sx, c.y, cloudImg.width * c.size, cloudImg.height * c.size);
+        });
+      }
+
+      function drawPlatforms() {
+        // Draw difficulty-based trail particles for platforms in later zones
+        // This runs once per frame before drawing platforms
+        platforms.forEach((p) => {
+          // Only create trail particles for platforms that are within view
+          if (p.x + p.w < cameraX || p.x > cameraX + width) {
+            return; // Skip off-screen platforms
+          }
+
+          // Create difficulty trail particles based on zone progression
+          if (p.zoneDifficulty > 0.4 && frameCount % 10 === 0) {
+            const difficultyIntensity = map(p.zoneDifficulty, 0.4, 1.0, 0.2, 1.0);
+
+            // Create different trail effects based on platform type and difficulty
+            if (random() < difficultyIntensity * 0.4) {
+              let particleColor;
+
+              // Use different colors based on platform type
+              switch (p.type) {
+                case "bouncy":
+                  particleColor = color(255, 240, 80, 100);
+                  break;
+                case "moving":
+                  particleColor = color(80, 180, 255, 100);
+                  break;
+                case "_deprecated_vanishing_": // This case should never be hit
+                  particleColor = color(220, 220, 255, 100);
+                  break;
+                case "crumbling":
+                  particleColor = color(220, 170, 120, 100);
+                  break;
+                default:
+                  particleColor = color(200, 200, 200, 80);
+              }
+
+              // Create different particle effects based on difficulty level
+              if (p.zoneDifficulty > 0.8) {
+                // Advanced zone: Intense particles
+                particles.push({
+                  x: p.x + random(p.w),
+                  y: p.y + random(-3, 0),
+                  vx: random(-0.5, 0.5),
+                  vy: random(-0.8, -0.4),
+                  color: particleColor,
+                  size: random(2, 4) * difficultyIntensity,
+                  life: 20 * difficultyIntensity,
+                  maxLife: 20 * difficultyIntensity,
+                  type: "sparkle",
+                });
+              } else if (p.zoneDifficulty > 0.6) {
+                // Mid-game: Medium particles
+                particles.push({
+                  x: p.x + random(p.w),
+                  y: p.y + random(p.h),
+                  vx: random(-0.3, 0.3),
+                  vy: random(-0.6, -0.2),
+                  color: particleColor,
+                  size: random(1.5, 3) * difficultyIntensity,
+                  life: 15 * difficultyIntensity,
+                  maxLife: 15 * difficultyIntensity,
+                  type: "default",
+                });
+              } else {
+                // Early zones: Subtle particles
+                particles.push({
+                  x: p.x + random(p.w),
+                  y: p.y + p.h - 2,
+                  vx: random(-0.2, 0.2),
+                  vy: random(-0.4, -0.1),
+                  color: particleColor,
+                  size: random(1, 2) * difficultyIntensity,
+                  life: 10 * difficultyIntensity,
+                  maxLife: 10 * difficultyIntensity,
+                });
+              }
+            }
+          }
+        });
+
+        // Update crumbling platforms first
+        for (let i = platforms.length - 1; i >= 0; i--) {
+          const p = platforms[i];
+          if (p.type === "crumbling" && p.crumbleTimer > 0) {
+            p.crumbleTimer--;
+
+            // Create falling debris when timer expires
+            if (p.crumbleTimer === 0) {
+              // Generate debris particles
+              for (let j = 0; j < 30; j++) {
+                particles.push({
+                  x: p.x + random(p.w),
+                  y: p.y + random(p.h),
+                  vx: random(-3, 3),
+                  vy: random(-4, 3),
+                  color: color(p.originalColor),
+                  size: random(5, 15),
+                  life: random(40, 80),
+                  maxLife: 80,
+                  type: "debris",
+                  angle: random(TWO_PI),
+                  rotationSpeed: random(-0.15, 0.15),
+                });
+              }
+
+              // Add a dramatic burst effect
+              for (let j = 0; j < 15; j++) {
+                const angle = random(TWO_PI);
+                particles.push({
+                  x: p.x + p.w / 2,
+                  y: p.y + p.h / 2,
+                  vx: cos(angle) * random(1, 5),
+                  vy: sin(angle) * random(1, 5),
+                  color: color(255, 180, 100),
+                  size: random(10, 20),
+                  life: 15,
+                  maxLife: 15,
+                  type: "sparkle",
+                });
+              }
+
+              // Add text effect
+              particles.push({
+                x: p.x + p.w / 2,
+                y: p.y,
+                vx: 0,
+                vy: -2,
+                color: color(255, 100, 50),
+                size: 2,
+                life: 50,
+                maxLife: 50,
+                type: "text",
+                text: "CRASH!",
+                textSize: 18,
+              });
+
+              // Remove the platform
+              platforms.splice(i, 1);
+              continue;
+            }
+          }
+        }
+
+        // Draw all remaining platforms
+        rectMode(CORNER);
+        platforms.forEach((p) => {
+          // Check if this is a tutorial platform for special rendering
+          const isTutorial = p.isTutorial === true;
+
+          // Common tutorial platform rendering before type-specific rendering
+          if (isTutorial) {
+            // Create periodic pulse effect for tutorial platforms
+            const pulseAmount = sin(frameCount * 0.1) * 0.5 + 0.5; // 0-1 oscillation
+
+            // Draw attention-grabbing glow
+            drawingContext.shadowBlur = 15 + pulseAmount * 10;
+            drawingContext.shadowColor = "rgba(255, 255, 255, 0.7)";
+
+            // Emit subtle particles to draw attention
+            if (frameCount % 10 === 0) {
+              particles.push({
+                x: p.x + random(p.w),
+                y: p.y - 5,
+                vx: random(-0.5, 0.5),
+                vy: random(-1, -0.5),
+                color: color(255, 255, 200, 150),
+                size: random(3, 6),
+                life: 40,
+                maxLife: 40,
+                type: "sparkle",
+              });
+            }
+
+            // Add "NEW!" indicator text above tutorial platforms
+            if (frameCount % 90 < 60) {
+              // Blink the text
+              fill(255, 255, 0);
+              stroke(0);
+              strokeWeight(3);
+              textSize(16);
+              textStyle(BOLD);
+              text("NEW!", p.x + p.w / 2, p.y - 25);
+              textStyle(NORMAL);
+              strokeWeight(0);
+            }
+          }
+
+          // Handle different platform types
+          switch (p.type) {
+            case "crumbling":
+              // Draw crumbling platform with cracks if timer is active
+              if (p.crumbleTimer > 0) {
+                // Calculate how "broken" the platform is (0-1)
+                const brokenness = 1 - p.crumbleTimer / p.crumbleMax;
+
+                // Darken and adjust color as it crumbles
+                const crackColor = lerpColor(color(p.originalColor), color(100, 60, 30), brokenness);
+                fill(crackColor);
+
+                // Draw main platform
+                stroke(0, 0, 0, 30);
+                strokeWeight(2);
+                rect(p.x, p.y, p.w, p.h);
+
+                // Draw cracks
+                stroke(0, 0, 0, 150);
+                strokeWeight(1);
+                for (let i = 0; i < 8 * brokenness; i++) {
+                  const crackX = p.x + random(p.w);
+                  const crackY = p.y + random(p.h);
+                  const crackLen = random(5, 15) * brokenness;
+                  const angle = random(TWO_PI);
+                  line(crackX, crackY, crackX + cos(angle) * crackLen, crackY + sin(angle) * crackLen);
+                }
+              } else {
+                fill(p.color);
+                stroke(0, 0, 0, 30);
+                strokeWeight(2);
+                rect(p.x, p.y, p.w, p.h);
+              }
+              break;
+
+            // Vertical platform type has been completely removed
+
+            case "moving":
+              // Store previous position before updating
+              if (p.prevX === undefined) {
+                p.prevX = p.x;
+              } else {
+                p.prevX = p.x;
+              }
+
+              // Calculate horizontal position based on sine wave
+              const horizOffset = sin(frameCount * p.speed + p.phase) * p.amplitude;
+              p.x = p.startX + horizOffset;
+
+              // Draw platform with trail effect
+              fill(p.color);
+              stroke(0, 0, 0, 30);
+              strokeWeight(2);
+
+              rect(p.x, p.y, p.w, p.h);
+
+              // Add horizontal movement trail particles
+              if (frameCount % 8 === 0 && abs(horizOffset) > p.amplitude * 0.6) {
+                const trailDir = horizOffset > 0 ? -1 : 1;
+                const edgeX = p.x + (trailDir > 0 ? 0 : p.w);
+
+                // Add multiple particles for a better trail effect
+                for (let i = 0; i < 2; i++) {
+                  particles.push({
+                    x: edgeX,
+                    y: p.y + random(p.h),
+                    vx: trailDir * random(0.5, 1),
+                    vy: random(-0.2, 0.2),
+                    color: color(150, 200, 255, 100),
+                    size: random(2, 5),
+                    life: 15,
+                    maxLife: 15,
+                    type: "sparkle",
+                  });
+                }
+
+                // Add occasional movement indicator when near max position
+                if (abs(horizOffset) > p.amplitude * 0.9 && random() < 0.2) {
+                  particles.push({
+                    x: p.x + (trailDir > 0 ? -15 : p.w + 15),
+                    y: p.y + p.h / 2,
+                    vx: trailDir * -0.5,
+                    vy: 0,
+                    color: color(150, 220, 255),
+                    size: 1,
+                    life: 20,
+                    maxLife: 20,
+                    type: "text",
+                    text: trailDir > 0 ? "←" : "→",
+                    textSize: 12,
+                  });
+                }
+              }
+              break;
+
+            case "bouncy":
+              // Draw bouncy platform with spring visual
+              fill(p.color);
+              stroke(0, 0, 0, 40);
+              strokeWeight(2);
+
+              // Draw main platform
+              rect(p.x, p.y, p.w, p.h);
+
+              // Draw bouncy indicators (springs)
+              const springCount = floor(p.w / 30);
+              const spacing = p.w / (springCount + 1);
+
+              for (let i = 1; i <= springCount; i++) {
+                const springX = p.x + i * spacing;
+                const compressionOffset = p.springCompression * 3;
+
+                // Draw spring coil
+                stroke(80, 80, 80);
+                strokeWeight(3);
+                const springWidth = 10;
+                const springHeight = 10 - compressionOffset;
+                const coils = 3;
+
+                beginShape();
+                for (let j = 0; j <= coils * 2; j++) {
+                  const segX = springX + (j % 2 === 0 ? -springWidth / 2 : springWidth / 2);
+                  const segY = p.y + springHeight * (j / (coils * 2));
+                  vertex(segX, segY);
+                }
+                endShape();
+
+                // Draw spring top cap
+                fill(220, 220, 0);
+                noStroke();
+                ellipse(springX, p.y, springWidth + 4, 4);
+              }
+
+              // Spring gradually decompresses if compressed
+              p.springCompression = max(0, p.springCompression - 0.5);
+              break;
+            default:
+              // Normal platform
+              fill(p.color);
+              stroke(0, 0, 0, 30);
+              strokeWeight(2);
+
+              // Add zone difficulty visual indicators for normal platforms
+              if (p.zoneDifficulty > 0.5 && !p.isTutorial) {
+                // Apply a difficulty pattern or highlight
+                const diffStripes = round(map(p.zoneDifficulty, 0.5, 1.0, 2, 5));
+                const stripeW = p.w / (diffStripes * 2 - 1);
+
+                // Draw difficulty stripes
+                for (let i = 0; i < diffStripes; i++) {
+                  const stripeFill = lerpColor(
+                    color(p.color),
+                    color(150, 150, 150),
+                    map(p.zoneDifficulty, 0.5, 1.0, 0.1, 0.3),
+                  );
+                  fill(stripeFill);
+                  rect(p.x + i * stripeW * 2, p.y, stripeW, p.h);
+                }
+
+                // Add a subtle glow intensity based on difficulty
+                if (p.zoneDifficulty > 0.7) {
+                  const glowIntensity = map(p.zoneDifficulty, 0.7, 1.0, 3, 8);
+                  drawingContext.shadowBlur = glowIntensity;
+                  drawingContext.shadowColor = "rgba(200, 200, 200, 0.3)";
+                }
+              }
+
+              rect(p.x, p.y, p.w, p.h);
+          }
+        });
+        noStroke();
+
+        // Reset shadow settings at the end of drawing platforms
+        drawingContext.shadowBlur = 0;
+      }
+
+      function drawThings() {
+        imageMode(CENTER);
+        things.forEach((t) => {
+          const bob = sin(frameCount * THING_BOB_SPEED + t.phase) * THING_BOB_AMPLITUDE;
+          const sheet = t.collected ? thingSpriteSheet : thingSpriteSheetGrey;
+          const col = t.frameIndex % THING_FRAMES_PER_ROW;
+          const row = Math.floor(t.frameIndex / THING_FRAMES_PER_ROW);
+          
+          // In p5.js image(), source coordinates come after destination coordinates
+          // Format: image(img, dx, dy, dw, dh, sx, sy, sw, sh)
+          image(
+            sheet,
+            t.x, 
+            t.y + bob, 
+            t.size, 
+            t.size,
+            col * THING_FRAME_SIZE,
+            row * THING_FRAME_SIZE,
+            THING_FRAME_SIZE,
+            THING_FRAME_SIZE
+          );
+        });
+      }
+
+      function drawGoal() {
+        rectMode(CORNER);
+        fill(goal.color);
+        rect(goal.x, goal.y, goal.w, goal.h);
+      }
+
+      function drawNoggles() {
+        imageMode(CENTER);
+        noggles.forEach((n) => {
+          // Draw trail for active noggles
+          if (n.hasTrail && frameCount % 2 === 0) {
+            particles.push({
+              x: n.x,
+              y: n.y,
+              vx: -n.vx * 0.1,
+              vy: -n.vy * 0.1,
+              size: random(3, 8),
+              life: random(8, 15),
+              color: n.trailColor || color(255, 50, 50, 100),
+            });
+          }
+
+          push();
+          translate(n.x, n.y);
+          rotate(n.angle);
+          const sz = n.r * 10;
+
+          // Add glow effect for noggles in flight
+          if (n.hasTrail) {
+            drawingContext.shadowBlur = 15;
+            drawingContext.shadowColor = "rgba(255, 50, 50, 0.5)";
+          }
+
+          image(noggleImg, 0, 0, sz, sz);
+          pop();
+        });
+      }
+
+      // Helper function for distance calculation
+      function distToRectangle(px, py, rx, ry, rw, rh) {
+        const nearestX = max(rx, min(px, rx + rw));
+        const nearestY = max(ry, min(py, ry + rh));
+        return dist(px, py, nearestX, nearestY);
+      }
+
+      function updateNoggles() {
+        for (let i = noggles.length - 1; i >= 0; i--) {
+          const n = noggles[i];
+          n.vy += NOGGLE_GRAVITY;
+          n.x += n.vx;
+          n.y += n.vy;
+          n.angle += n.angularVelocity;
+
+          // Check for near misses with platforms (within 15px)
+          for (const p of platforms) {
+            const distToPlat = distToRectangle(n.x, n.y, p.x, p.y, p.w, p.h);
+
+            if (distToPlat < 15 && distToPlat > 0) {
+              // This is a near miss! Create "so close" particles
+              for (let j = 0; j < 5; j++) {
+                particles.push({
+                  x: n.x,
+                  y: n.y,
+                  vx: random(-1, 1),
+                  vy: random(-2, -0.5),
+                  size: 3,
+                  life: random(20, 30),
+                  color: color(255, 255, 100, 200),
+                  text: "Close!",
+                });
+              }
+            }
+
+            // Regular collision check
+            if (n.x > p.x && n.x < p.x + p.w && n.y > p.y && n.y < p.h) {
+              // Create satisfying burst particles
+              for (let j = 0; j < 20; j++) {
+                const ang = random(TWO_PI);
+                particles.push({
+                  x: n.x,
+                  y: n.y,
+                  vx: cos(ang) * random(1, 4),
+                  vy: sin(ang) * random(1, 4),
+                  size: random(3, 8),
+                  life: random(15, 30),
+                  color: color(random(200, 255), random(100, 200), random(50, 150), 200),
+                });
+              }
+
+              p.color = activeBrightPalette[floor(random(activeBrightPalette.length))];
+              if (window.FarcadeSDK?.singlePlayer) {
+                window.FarcadeSDK.singlePlayer.actions.hapticFeedback();
+              }
+              noggles.splice(i, 1);
+              break;
+            }
+          }
+
+          // Similar near-miss detection for things
+          for (const t of things) {
+            const distToThing = dist(n.x, n.y, t.x, t.y) - t.size / 2;
+
+            // Near miss feedback for things
+            if (!t.collected && distToThing < 20 && distToThing > 0) {
+              // This is a near miss with a thing!
+              for (let j = 0; j < 3; j++) {
+                particles.push({
+                  x: n.x,
+                  y: n.y,
+                  vx: random(-1, 1),
+                  vy: random(-2, -0.5),
+                  size: 3,
+                  life: random(20, 30),
+                  color: color(255, 200, 100, 200),
+                  text: "Almost!",
+                });
+              }
+            }
+
+            // thing collision - keep existing code but add particle effects
+            if (
+              !t.collected &&
+              n.x > t.x - t.size / 2 &&
+              n.x < t.x + t.size / 2 &&
+              n.y > t.y - t.size / 2 &&
+              n.y < t.y + t.size / 2
+            ) {
+              // Create colorful burst on collection
+              for (let j = 0; j < 25; j++) {
+                const ang = random(TWO_PI);
+                const particleDist = random(5, 15);
+                particles.push({
+                  x: t.x + cos(ang) * particleDist,
+                  y: t.y + sin(ang) * particleDist,
+                  vx: cos(ang) * random(1, 5),
+                  vy: sin(ang) * random(-5, 1),
+                  size: random(5, 10),
+                  life: random(20, 40),
+                  color: color(random(100, 255), random(100, 255), random(100, 255)),
+                });
+              }
+
+              // Existing collection logic
+              t.collected = true;
+              score += 10;
+              tagTimer = TAG_TIMER_MAX;
+              if (window.FarcadeSDK?.singlePlayer) {
+                window.FarcadeSDK.singlePlayer.actions.hapticFeedback();
+              }
+              noggles.splice(i, 1);
+              break;
+            }
+          }
+
+          // out of bounds
+          if (n.y > cameraY + height * 2) {
+            noggles.splice(i, 1);
+          }
+        }
+      }
+
+      // New function for unified input handling
+      function collectInputs() {
+        const inputs = {
+          moveLeft: false,
+          moveRight: false,
+          jump: false,
+          throw: false,
+          throwTarget: { x: 0, y: 0 },
+          moveStrength: 1.0,
+          jumpBuffered: jumpBufferTimer > 0,
+        };
+
+        // Keyboard inputs using global keyTracker (works regardless of canvas focus)
+        // Using numeric key codes for arrow keys (LEFT=37, RIGHT=39, UP=38) along with WASD
+        inputs.moveLeft = keyTracker.isKeyDown(37) || keyTracker.isKeyDown("a");
+        inputs.moveRight = keyTracker.isKeyDown(39) || keyTracker.isKeyDown("d");
+        inputs.jump = keyTracker.isKeyDown(38) || keyTracker.isKeyDown("w") || keyTracker.isKeyDown(32); // Space
+
+        // Touch/mouse inputs
+        for (const t of touches) {
+          if (dist(t.x, t.y, joystick.x, joystick.y) < joystick.activeRadius) {
+            const dx = t.x - joystick.x;
+            inputs.moveLeft = inputs.moveLeft || dx < -joystick.inner / 2;
+            inputs.moveRight = inputs.moveRight || dx > joystick.inner / 2;
+            // Store analog value for variable speed
+            inputs.moveStrength = constrain(abs(dx) / (joystick.outer - joystick.inner), 0, 1);
+          }
+
+          // Check for touch-based jump button presses
+          if (dist(t.x, t.y, jumpBtn.x, jumpBtn.y) < jumpBtn.r) {
+            inputs.jump = true;
+          }
+        }
+
+        // If jump is detected through keyboard or touch, trigger the jump buffer
+        if (inputs.jump && !previousJumpState) {
+          jumpBufferTimer = 6;
+          tryPerformJump();
+        }
+
+        // Track the previous jump state to detect new presses
+        previousJumpState = inputs.jump;
+
+        return inputs;
+      }
+
+      function updateJumpState() {
+        // Decrement timers
+        if (jumpBufferTimer > 0) jumpBufferTimer--;
+        if (coyoteTimer > 0) coyoteTimer--;
+
+        // Clear ground state when moving upward
+        if (player.velocityY < -0.1) {
+          player.isOnGround = false;
+        }
+
+        // Start coyote timer when walking off platforms
+        if (!player.isOnGround && player.wasOnGround) {
+          coyoteTimer = 8; // Slightly more generous (133ms at 60fps)
+        }
+
+        player.wasOnGround = player.isOnGround;
+      }
+
+      function tryPerformJump() {
+        if ((player.isOnGround || coyoteTimer > 0) && jumpBufferTimer > 0) {
+          player.velocityY = -15;
+          player.isOnGround = false;
+          coyoteTimer = 0;
+          jumpBufferTimer = 0;
+
+          // Keep timer for animation purposes but don't apply scaling
+          player.jumpSquash = 1.5;
+
+          // Enhanced jump particles for better visual feedback (since we're removing the squash)
+          // Create a dust cloud effect at player's feet
+          for (let i = 0; i < 15; i++) {
+            const angle = random(PI / 6, (5 * PI) / 6);
+            const speed = random(1, 4);
+            particles.push({
+              x: player.x + random(-10, 10),
+              y: player.y + player.height / 2,
+              vx: cos(angle) * speed * (random() > 0.5 ? -1 : 1),
+              vy: -sin(angle) * speed,
+              size: random(3, 8),
+              life: random(15, 25),
+              maxLife: 25,
+              color: color(255, 255, 255, 180),
+              type: "sparkle",
+            });
+          }
+
+          // Add text effect occasionally
+          if (random() < 0.3) {
+            particles.push({
+              x: player.x,
+              y: player.y - 20,
+              vx: 0,
+              vy: -1.5,
+              color: color(255, 255, 200),
+              size: 1,
+              life: 30,
+              maxLife: 30,
+              type: "text",
+              text: "Jump!",
+              textSize: 12,
+            });
+          }
+
+          if (window.FarcadeSDK?.singlePlayer) {
+            window.FarcadeSDK.singlePlayer.actions.hapticFeedback();
+          }
+        }
+      }
+
+      function applyMovementPhysics(inputs) {
+        // Target velocity based on input
+        let targetVelocityX = 0;
+        if (inputs.moveLeft) targetVelocityX = -5;
+        if (inputs.moveRight) targetVelocityX = 5;
+
+        // Apply analog control if using touch
+        if (inputs.moveStrength !== undefined) {
+          targetVelocityX *= inputs.moveStrength;
+        }
+
+        // Apply acceleration and deceleration for smoother movement
+        const accelerationGround = 0.8;
+        const accelerationAir = 0.4;
+        const currentAccel = player.isOnGround ? accelerationGround : accelerationAir;
+
+        if (targetVelocityX !== 0) {
+          // Accelerating
+          player.velocityX = lerp(player.velocityX, targetVelocityX, currentAccel);
+        } else {
+          // Decelerating (stop more quickly)
+          player.velocityX *= 0.8;
+          if (abs(player.velocityX) < 0.1) player.velocityX = 0;
+        }
+
+        // Update facing direction only when actually moving
+        if (abs(targetVelocityX) > 0.1) {
+          player.animation.facingDirection = targetVelocityX > 0 ? 1 : -1;
+        }
+      }
+
+      function handlePlayerInput(inputs) {
+        // Remove this entire block which is overriding velocityX
+        // player.velocityX = 0;
+        // if (inputs.moveLeft) {
+        //   player.velocityX = -5;
+        //   player.animation.facingDirection = -1;
+        // }
+        // if (inputs.moveRight) {
+        //   player.velocityX = 5;
+        //   player.animation.facingDirection = 1;
+        // }
+        // for (const t of touches) {
+        //   if (dist(t.x, t.y, joystick.x, joystick.y) < joystick.activeRadius) {
+        //     const dx = constrain(t.x - joystick.x, -(joystick.outer - joystick.inner), joystick.outer - joystick.inner);
+        //     player.velocityX = dx > 0 ? 5 : -5;
+        //     player.animation.facingDirection = dx > 0 ? 1 : -1;
+        //     break;
+        //   }
+        // }
+
+        // Keep just the jump handling part
+        for (const t of touches) {
+          if (dist(t.x, t.y, jumpBtn.x, jumpBtn.y) < jumpBtn.r) {
+            jumpBufferTimer = 6;
+            tryPerformJump();
+            break;
+          }
+        }
+      }
+
+      function tryPerformJump() {
+        if ((player.isOnGround || coyoteTimer > 0) && jumpBufferTimer > 0) {
+          player.velocityY = -15;
+          player.isOnGround = false;
+          coyoteTimer = 0;
+          jumpBufferTimer = 0;
+
+          // Keep timer for animation purposes but don't apply scaling
+          player.jumpSquash = 1.5;
+
+          // Enhanced jump particles for better visual feedback
+          // Create a dust cloud effect at player's feet
+          for (let i = 0; i < 15; i++) {
+            const angle = random(PI / 6, (5 * PI) / 6);
+            const speed = random(1, 4);
+            particles.push({
+              x: player.x + random(-10, 10),
+              y: player.y + player.height / 2,
+              vx: cos(angle) * speed * (random() > 0.5 ? -1 : 1),
+              vy: -sin(angle) * speed,
+              size: random(3, 8),
+              life: random(15, 25),
+              maxLife: 25,
+              color: color(255, 255, 255, 180),
+              type: "sparkle",
+            });
+          }
+
+          // Add text effect occasionally
+          if (random() < 0.3) {
+            particles.push({
+              x: player.x,
+              y: player.y - 20,
+              vx: 0,
+              vy: -1.5,
+              color: color(255, 255, 200),
+              size: 1,
+              life: 30,
+              maxLife: 30,
+              type: "text",
+              text: "Jump!",
+              textSize: 12,
+            });
+          }
+
+          if (window.FarcadeSDK?.singlePlayer) {
+            window.FarcadeSDK.singlePlayer.actions.hapticFeedback();
+          }
+        }
+      }
+
+      function updatePlayer() {
+        // Store the previous platform the player was on
+        // This helps us detect when we've just landed on a new platform
+        const previousPlatform = player.platformBelow;
+        player.platformBelow = null;
+
+        // Apply normal horizontal movement
+        player.x += player.velocityX;
+
+        // First handle horizontal collisions
+        platforms.forEach((p) => {
+          if (isColliding(player, p)) {
+            // Don't resolve horizontal collision for moving platforms when standing on top
+            if (p.type === "moving" && player.isOnGround && player.y <= p.y + 1) {
+              // We'll handle this below with platform movement
+            } else {
+              // Normal horizontal collision
+              if (player.velocityX > 0) {
+                player.x = p.x - player.width / 2;
+              } else {
+                player.x = p.x + p.w + player.width / 2;
+              }
+              player.velocityX = 0;
+            }
+          }
+        });
+
+        // Update coyote time and jump buffer
+        if (!player.isOnGround) coyoteTimer = max(coyoteTimer - 1, 0);
+        if (jumpBufferTimer > 0) jumpBufferTimer--;
+        if (player.isOnGround && jumpBufferTimer > 0) tryPerformJump();
+
+        // Apply gravity and vertical movement
+        player.velocityY += 0.5;
+        player.y += player.velocityY;
+        player.isOnGround = false;
+
+        // Handle platform collisions and special platform behaviors
+        platforms.forEach((p) => {
+          if (isColliding(player, p)) {
+            const prevBot = player.y - player.velocityY + player.height / 2;
+
+            if (player.velocityY > 0 && prevBot <= p.y + 1) {
+              // Landing on top of platform
+              player.y = p.y - player.height / 2;
+              player.platformBelow = p; // Track which platform player is on
+
+              // Handle platform-specific landing behaviors
+              switch (p.type) {
+                case "crumbling":
+                  // Existing crumbling platform code...
+                  if (p.crumbleTimer === -1) {
+                    p.crumbleTimer = p.crumbleMax;
+
+                    // Create crumbling particles...
+                    for (let i = 0; i < 5; i++) {
+                      particles.push({
+                        x: player.x + random(-10, 10),
+                        y: p.y,
+                        vx: random(-1, 1),
+                        vy: random(-1, -0.2),
+                        color: color(p.color),
+                        size: random(3, 6),
+                        life: 15,
+                        maxLife: 15,
+                        type: "debris",
+                        angle: random(TWO_PI),
+                        rotationSpeed: random(-0.1, 0.1),
+                      });
+                    }
+
+                    // Add "Cracking!" text effect
+                    particles.push({
+                      x: player.x,
+                      y: player.y - 25,
+                      vx: 0,
+                      vy: -1,
+                      color: color(255, 100, 50),
+                      size: 2,
+                      life: 30,
+                      maxLife: 30,
+                      type: "text",
+                      text: "Cracking!",
+                      textSize: 12,
+                    });
+                  }
+                  break;
+
+                case "bouncy":
+                  // Compress spring and apply bounce
+                  p.springCompression = 5;
+                  player.velocityY = -15 * p.bounceFactor; // Apply moderately higher jump
+
+                  // In higher difficulty zones, add some horizontal momentum too
+                  if (p.zoneDifficulty > 0.7 && !p.isTutorial) {
+                    const horizontalBoostFactor = map(p.zoneDifficulty, 0.7, 1.0, 0.3, 0.8);
+
+                    // Determine direction based on player's position on the platform
+                    const playerPosOnPlat = (player.x - p.x) / p.w;
+
+                    // Higher boost when near edges, minimal in center
+                    const edgeFactor = abs(playerPosOnPlat - 0.5) * 2; // 0 at center, 1 at edges
+                    const boostMagnitude = 4 * horizontalBoostFactor * edgeFactor;
+
+                    // Apply horizontal boost away from center
+                    if (playerPosOnPlat < 0.5) {
+                      // Left side - boost left
+                      player.velocityX = -boostMagnitude;
+                    } else {
+                      // Right side - boost right
+                      player.velocityX = boostMagnitude;
+                    }
+
+                    // Add side-boost indicator for advanced zone bouncy platforms
+                    if (edgeFactor > 0.6) {
+                      const boostDirection = playerPosOnPlat < 0.5 ? "←" : "→";
+                      particles.push({
+                        x: player.x,
+                        y: player.y - 35,
+                        vx: player.velocityX * 0.1,
+                        vy: -1.5,
+                        color: color(255, 220, 100),
+                        size: 2,
+                        life: 30,
+                        maxLife: 30,
+                        type: "text",
+                        text: boostDirection + " BOOST!",
+                        textSize: 14,
+                      });
+                    }
+                  }
+
+                  // Add bounce particles
+                  for (let i = 0; i < 12; i++) {
+                    const angle = random(-PI / 4, (-3 * PI) / 4);
+                    particles.push({
+                      x: player.x + random(-10, 10),
+                      y: player.y + player.height / 2 - 5,
+                      vx: cos(angle) * random(1, 3),
+                      vy: sin(angle) * random(1, 3),
+                      color: color(255, 255, 100),
+                      size: random(3, 8),
+                      life: 25,
+                      maxLife: 25,
+                      type: "sparkle",
+                    });
+                  }
+
+                  // Add bounce text effect - bigger and more noticeable
+                  particles.push({
+                    x: player.x,
+                    y: player.y - 25,
+                    vx: 0,
+                    vy: -2,
+                    color: color(255, 220, 0),
+                    size: 2,
+                    life: 40,
+                    maxLife: 40,
+                    type: "text",
+                    text: "BOING!",
+                    textSize: 16,
+                  });
+                  break;
+
+                // Vertical platform type has been removed
+
+                case "moving":
+                  // Store current position for next frame's velocity calculation
+                  if (p.prevX === undefined) {
+                    p.prevX = p.x;
+                  }
+                  break;
+              }
+
+              // Common landing behavior
+              if (p.type !== "bouncy") {
+                player.velocityY = 0;
+              }
+
+              player.isOnGround = true;
+              coyoteTimer = 6;
+            } else {
+              // Hitting platform from below or side
+              if (player.velocityY < 0) player.velocityY = 0;
+              player.y = p.y + p.h + player.height / 2;
+
+              // Ensure we don't stick to the bottom of the platform
+              if (player.platformBelow === p) {
+                player.platformBelow = null;
+              }
+            }
+          }
+        });
+
+        // Apply platform movement - this is the key to fixing the issues
+        // We do this AFTER regular physics to ensure player stays attached
+        if (player.isOnGround && player.platformBelow) {
+          const p = player.platformBelow;
+
+          // Handle horizontal movement for moving platforms
+          if (p.type === "moving") {
+            // If this is the first frame we've landed on this platform,
+            // just initialize the prevX value without moving the player
+            if (p.prevX === undefined || player.platformBelow !== previousPlatform) {
+              p.prevX = p.x;
+            } else {
+              const platformDeltaX = p.x - p.prevX;
+              // Apply platform's horizontal movement directly to player position
+              player.x += platformDeltaX;
+            }
+            p.prevX = p.x;
+          }
+
+          // Vertical platforms have been removed from the game
+        }
+
+        // Keep player within level bounds
+        player.x = constrain(player.x, player.width / 2, levelWidth - player.width / 2);
+      }
+
+      function updatePlayerAnimationState() {
+        let set = player.animation.currentSet;
+        if (player.velocityY < -0.1 && !player.isOnGround) set = "jump";
+        else if (player.velocityY > 0.1 && !player.isOnGround) set = "fall";
+        else if (player.isOnGround && abs(player.velocityX) > 0.1) set = "walk";
+        else if (player.isOnGround) set = "idle";
+        if (set !== player.animation.currentSet) {
+          player.animation.currentSet = set;
+          player.animation.frameIndex = 0;
+          player.animation.tick = 0;
+        }
+      }
+
+      function advancePlayerFrame() {
+        const def = ANIMATION_DEFS[player.animation.currentSet];
+        if (!def) return;
+        player.animation.tick++;
+        if (player.animation.tick >= def.speed) {
+          player.animation.tick = 0;
+          player.animation.frameIndex = (player.animation.frameIndex + 1) % def.frames;
+        }
+      }
+
+      function drawPlayer() {
+        if (!player.spriteSheet) {
+          push();
+          rectMode(CENTER);
+          fill(255, 0, 0);
+          rect(player.x, player.y, player.width, player.height);
+          pop();
+          return;
+        }
+        const a = player.animation;
+        const dir = a.facingDirection === 1 ? "right" : "left";
+        const animMap = ANIMATION_MAP[a.currentSet][dir];
+        const frame = a.frameIndex % ANIMATION_DEFS[a.currentSet].frames;
+        const sx = (animMap.startFrame + frame) * FRAME_WIDTH;
+        const sy = animMap.row * FRAME_HEIGHT;
+
+        // Use consistent 2.5 scale for character - maintains proportions in all animations
+        const playerScale = 2.5;
+        const dw = FRAME_WIDTH * playerScale;
+        const dh = FRAME_HEIGHT * playerScale;
+
+        push();
+        translate(player.x, player.y);
+
+        // Keep track of jump animation state but don't apply squash/stretch scaling
+        if (player.jumpSquash > 0) {
+          player.jumpSquash = max(player.jumpSquash - 0.1, 0);
+        }
+
+        // Apply throw animation rotation only (no scaling)
+        if (player.throwSquash > 0) {
+          rotate(player.animation.facingDirection * customMap(player.throwSquash, 1, 0, PI / 16, 0));
+          player.throwSquash = max(player.throwSquash - 0.15, 0);
+        }
+
+        const yoff = (dh - player.height) / 2;
+        image(player.spriteSheet, 0, -yoff, dw, dh, sx, sy, FRAME_WIDTH, FRAME_HEIGHT);
+        pop();
+      }
+
+      function drawUI() {
+        // Draw joystick and jump controls
+        noFill();
+        stroke(0, 0, 100, 50);
+        strokeWeight(2);
+        circle(joystick.x, joystick.y, joystick.outer * 2);
+        let kx = joystick.x;
+        for (const t of touches) {
+          if (dist(t.x, t.y, joystick.x, joystick.y) < joystick.activeRadius) {
+            kx += constrain(t.x - joystick.x, -(joystick.outer - joystick.inner), joystick.outer - joystick.inner);
+            break;
+          }
+        }
+        noStroke();
+        fill(0, 0, 100, 80);
+        circle(kx, joystick.y, joystick.inner * 2);
+        fill(0, 0, 100, 20);
+        circle(jumpBtn.x, jumpBtn.y, jumpBtn.r * 2);
+        fill(0, 0, 100, 80);
+        textSize(24);
+        text("↑", jumpBtn.x, jumpBtn.y + 2);
+
+        // Draw score
+        noStroke();
+        fill(0, 0, 100);
+        textSize(24);
+        textAlign(CENTER, TOP);
+        text(`Score: ${score}`, width / 2, 10);
+
+        // Draw level section indicator with updated naming to match more varied level
+        // Calculate the exact progress through the level
+        const levelProgress = player.x / LEVEL_LENGTH;
+        const levelSection = floor(levelProgress * 5);
+        const sectionName = [
+          "Starting Area",
+          "Bouncy Challenges",
+          "Mixed Movement",
+          "Tricky Terrain",
+          "Master Challenge",
+        ][Math.min(levelSection, 4)];
+
+        textSize(16);
+        textAlign(CENTER, TOP);
+        fill(255, 255, 220);
+        text(sectionName, width / 2, 40);
+
+        // Draw a fancy progress bar that shows zone boundaries
+        const progressBarWidth = width * 0.6;
+        const progressBarHeight = 8;
+        const progressBarX = width / 2 - progressBarWidth / 2;
+        const progressBarY = 65;
+
+        // Draw background track
+        noStroke();
+        fill(50, 50, 50, 100);
+        rect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, 4);
+
+        // Draw progress
+        const progressWidth = progressBarWidth * levelProgress;
+
+        // Create a gradient for the progress bar based on difficulty
+        drawingContext.save();
+        const gradient = drawingContext.createLinearGradient(
+          progressBarX,
+          progressBarY,
+          progressBarX + progressBarWidth,
+          progressBarY,
+        );
+
+        // Add color stops for different zones
+        gradient.addColorStop(0, "rgb(150, 255, 150)"); // Green for easy beginning
+        gradient.addColorStop(INTRO_ZONES.bouncy.start, "rgb(220, 255, 100)"); // Yellow-green for bouncy
+        gradient.addColorStop(INTRO_ZONES.moving.start, "rgb(100, 200, 255)"); // Blue for moving
+        gradient.addColorStop(INTRO_ZONES.crumbling.start, "rgb(255, 150, 100)"); // Orange for crumbling
+        gradient.addColorStop(INTRO_ZONES.mixed.start, "rgb(255, 80, 80)"); // Red for final zone
+
+        drawingContext.fillStyle = gradient;
+        rect(progressBarX, progressBarY, progressWidth, progressBarHeight, 4);
+        drawingContext.restore();
+
+        // Draw zone boundary markers
+        stroke(255, 255, 255, 150);
+        strokeWeight(1.5);
+
+        // Draw markers for each zone boundary
+        for (const zone in INTRO_ZONES) {
+          if (INTRO_ZONES[zone].start > 0) {
+            // Skip first zone marker
+            const markerX = progressBarX + progressBarWidth * INTRO_ZONES[zone].start;
+            line(markerX, progressBarY - 2, markerX, progressBarY + progressBarHeight + 2);
+
+            // Add small zone indicators as tiny icons or colored dots
+            noStroke();
+            switch (zone) {
+              case "bouncy":
+                fill(255, 240, 80);
+                break;
+              case "moving":
+                fill(80, 180, 255);
+                break;
+              case "crumbling":
+                fill(220, 170, 120);
+                break;
+              case "mixed":
+                fill(255, 100, 100);
+                break;
+              default:
+                fill(200, 200, 200);
+            }
+
+            // Draw icon dots above markers
+            circle(markerX, progressBarY - 10, 6);
+          }
+        }
+
+        // Draw player position indicator
+        noStroke();
+        fill(255);
+        triangle(
+          progressBarX + progressWidth,
+          progressBarY + progressBarHeight + 6,
+          progressBarX + progressWidth - 5,
+          progressBarY + progressBarHeight + 1,
+          progressBarX + progressWidth + 5,
+          progressBarY + progressBarHeight + 1,
+        );
+
+        // Draw small platform type icons for this section
+        const iconSize = 15;
+        const iconSpacing = 18;
+        const totalWidth = 5 * iconSpacing;
+        let iconStartX = width / 2 - totalWidth / 2;
+
+        noStroke();
+        textSize(10);
+        textAlign(CENTER, CENTER); // Draw platform type indicators
+        const platformTypes = ["normal", "bouncy", "moving", "crumbling"];
+        platformTypes.forEach((type, i) => {
+          const iconX = iconStartX + i * iconSpacing * 2;
+          const iconY = 65;
+
+          // Determine if this platform type is common in current section
+          // Updated to match our more varied level design with all platform types introduced earlier
+          const isCommon =
+            (levelSection === 0 && (type === "normal" || type === "bouncy")) ||
+            (levelSection === 1 && (type === "normal" || type === "bouncy" || type === "moving")) ||
+            (levelSection === 2 &&
+              (type === "normal" || type === "bouncy" || type === "moving" || type === "crumbling")) ||
+            (levelSection === 3 &&
+              (type === "normal" || type === "bouncy" || type === "moving" || type === "crumbling")) ||
+            levelSection === 4; // All platforms are common in the final section
+
+          // Draw platform icon
+          if (isCommon) {
+            // Draw highlighted
+            switch (type) {
+              case "normal":
+                fill(200, 200, 200);
+                rect(iconX, iconY, iconSize, iconSize / 3);
+                break;
+              case "bouncy":
+                fill(255, 240, 80);
+                rect(iconX, iconY, iconSize, iconSize / 3);
+                fill(80, 80, 80);
+                text("↑", iconX, iconY + 6);
+                break;
+              case "moving":
+                fill(80, 180, 255); // Match the updated blue color
+                rect(iconX, iconY, iconSize, iconSize / 3);
+                fill(255);
+                text("↔", iconX, iconY + 6); // Horizontal arrow
+                break;
+              // Removed deprecated vertical platform case
+              case "crumbling":
+                fill(200, 150, 100);
+                rect(iconX, iconY, iconSize, iconSize / 3);
+                // Draw cracks
+                stroke(100, 60, 40, 200);
+                strokeWeight(1);
+                line(iconX - 3, iconY, iconX + 3, iconY);
+                line(iconX + 2, iconY - 3, iconX + 6, iconY + 3);
+                noStroke();
+                break;
+            }
+          } else {
+            // Draw dimmed
+            fill(100, 100, 100, 80);
+            rect(iconX, iconY, iconSize, iconSize / 3);
+          }
+        });
+
+        // Reset text alignment
+        textAlign(CENTER, CENTER);
+      }
+
+      function isColliding(a, b) {
+        const l1 = a.x - a.width / 2,
+          r1 = a.x + a.width / 2,
+          t1 = a.y - a.height / 2,
+          b1 = a.y + a.height / 2,
+          l2 = b.x,
+          r2 = b.x + b.w,
+          t2 = b.y,
+          b2 = b.y + b.h;
+        return r1 > l2 && l1 < r2 && b1 > t2 && t1 < b2;
+      }
+
+      function displayStartScreen() {
+        // 1️⃣ draw the full‑canvas background image
+        push();
+        imageMode(CORNER);
+        noTint();
+        image(titleBg, 0, 0, width, height);
+        pop();
+
+        // calculate Y positions
+        const startY = height - 10; // bottom edge for “Tap to Start”
+        const throwY = startY - 50; // throw Noggles
+        const jumpY = startY - 75; // jump
+        const moveY = startY - 100; // move left/right
+
+        // — Instructions just above the start prompt —
+        textFont("Roboto");
+        textSize(20);
+        fill("#000000");
+        textStyle(BOLD);
+        textAlign(CENTER, CENTER);
+        text("← → or A / D: Move", width / 2, moveY - 80);
+        text("↑ or W: Jump", width / 2, jumpY - 80);
+        text("Click / Tap to Throw Noggles", width / 2, throwY - 80);
+
+        // Add debug instructions (smaller text, less prominent)
+        textSize(14);
+        fill("#AAAAAA");
+        text("Press D for debug mode (with zone teleport)", width / 2, moveY - 110);
+
+        // Add platform type explanations
+        textSize(16);
+        fill("#FFFFFF");
+        text("Platform Types:", width / 2, height / 2 - 60);
+
+        textSize(14);
+        textAlign(LEFT, CENTER);
+        const platformInfoX = width / 2 - 120;
+
+        // Normal platforms
+        fill(200, 200, 200);
+        rect(platformInfoX, height / 2 - 30, 30, 10);
+        fill("#FFFFFF");
+        text("Regular platforms", platformInfoX + 40, height / 2 - 25);
+
+        // Bouncy platforms
+        fill(255, 240, 80);
+        rect(platformInfoX, height / 2 - 5, 30, 10);
+        fill("#FFFFFF");
+        text("Bouncy platforms - jump higher!", platformInfoX + 40, height / 2);
+
+        // Moving platforms
+        fill(80, 180, 255);
+        rect(platformInfoX, height / 2 + 20, 30, 10);
+        fill("#FFFFFF");
+        text("Moving platforms - slide left & right", platformInfoX + 40, height / 2 + 25);
+
+        // Crumbling platforms
+        fill(200, 150, 100);
+        rect(platformInfoX, height / 2 + 45, 30, 10);
+        // Draw cracks
+        stroke(100, 60, 40);
+        strokeWeight(1);
+        line(platformInfoX + 10, height / 2 + 70, platformInfoX + 20, height / 2 + 75);
+        line(platformInfoX + 15, height / 2 + 70, platformInfoX + 25, height / 2 + 76);
+        noStroke();
+        fill("#FFFFFF");
+        text("Crumbling platforms - fall when stepped on", platformInfoX + 40, height / 2 + 75);
+
+        // Reset alignment
+        textAlign(CENTER, CENTER);
+
+        // — “Start” prompt at the very bottom —
+
+        textSize(24);
+        textAlign(CENTER, BOTTOM);
+        text("Tap or Click to Start", width / 2, startY);
+        textStyle(NORMAL);
+      }
+
+      function checkGoal() {
+        if (isColliding(player, goal)) {
+          console.log("[DEBUG] checkGoal → win", {
+            playerPos: { x: player.x, y: player.y },
+            goalPos: goal,
+            score,
+            gameStateBefore: gameState,
+          });
+          gameState = "win";
+        }
+      }
+
+      function checkFallen() {
+        // if player falls off bottom of screen…
+        if (player.y - player.height / 2 > cameraY + height * 2) {
+          console.log("[DEBUG] checkFallen → gameOver", {
+            playerY: player.y,
+            cameraY,
+            threshold: cameraY + height * 2,
+            score,
+            gameStateBefore: gameState,
+          });
+
+          // spawn the final noggle…
+          noggles.push({
+            x: player.x,
+            y: player.y - FRAME_HEIGHT * 1.5,
+            vx: 0,
+            vy: -NOGGLE_MAX_SPEED,
+            r: 10,
+            angle: 0,
+            angularVelocity: random(-0.2, 0.2),
+          });
+
+          gameState = "gameOver";
+        }
+      }
+
+      function keyPressed() {
+        if (gameState === "playing") {
+          // The actual key checking is now handled by the global keyTracker in collectInputs
+          // We only need to handle jump buffering here
+          // UP_ARROW=38, W=87, SPACE=32
+          if ([38, 87, 32].includes(keyCode)) {
+            jumpBufferTimer = 6;
+            tryPerformJump();
+          }
+
+          // Debug mode toggle (D key)
+          if (keyCode === 68) {
+            // 'D' key (keyCode 68)
+            debugMode = !debugMode;
+            console.log("Debug mode: " + (debugMode ? "ON" : "OFF"));
+          }
+
+          // Zone teleport in debug mode
+          if (debugMode && keyCode >= 49 && keyCode <= 53) {
+            // Number keys 1-5
+            const zoneIndex = keyCode - 49; // 0-4
+            teleportToZone(zoneIndex);
+          }
+        }
+
+        // Don't prevent default for canvas refocusing to work properly
+        return true;
+      }
+
+      // Function to teleport player to a specific zone (for debugging)
+      function teleportToZone(zoneIndex) {
+        let targetX = 0;
+
+        // Calculate target position based on zone
+        switch (zoneIndex) {
+          case 0: // Normal platforms zone - beginning
+            targetX = LEVEL_LENGTH * 0.005;
+            break;
+          case 1: // Bouncy platforms zone
+            targetX = LEVEL_LENGTH * (INTRO_ZONES.bouncy.start + 0.01);
+            break;
+          case 2: // Moving platforms zone
+            targetX = LEVEL_LENGTH * (INTRO_ZONES.moving.start + 0.01);
+            break;
+          case 3: // Crumbling platforms zone
+            targetX = LEVEL_LENGTH * (INTRO_ZONES.crumbling.start + 0.01);
+            break;
+          case 4: // Mixed zone
+            targetX = LEVEL_LENGTH * (INTRO_ZONES.mixed.start + 0.01);
+            break;
+        }
+
+        // Find a suitable platform near the target X position
+        const nearbyPlatforms = platforms.filter((p) => p.x > targetX - 200 && p.x < targetX + 1000);
+
+        if (nearbyPlatforms.length > 0) {
+          // Sort by distance to target X
+          nearbyPlatforms.sort((a, b) => Math.abs(a.x - targetX) - Math.abs(b.x - targetX));
+
+          // Position player on top of the nearest platform
+          const platform = nearbyPlatforms[0];
+          player.x = platform.x + platform.w / 2;
+          player.y = platform.y - player.height / 2;
+          player.velocityY = 0;
+          player.velocityX = 0;
+
+          // Reset tag timer when teleporting
+          tagTimer = TAG_TIMER_MAX;
+
+          console.log(`Teleported to zone ${zoneIndex + 1} at position ${Math.round(player.x)}`);
+        } else {
+          console.log(`Could not find suitable platform in zone ${zoneIndex + 1}`);
+        }
+      }
+
+      function mousePressed() {
+        // Check if this is actually a touch event on mobile
+        if (touches && touches.length > 0) {
+          return false; // Skip processing if it's actually a touch event
+        }
+
+        // Always ensure keyboard focus on all mouse clicks
+        document.querySelector("canvas").focus();
+
+        if (gameState === "start") {
+          initializeGame();
+          gameState = "playing";
+          return false;
+        }
+        if (gameState === "playing") {
+          // Use our improved throw handler
+          handleThrowInput(mouseX, mouseY);
+        }
+        return false; // Prevent default
+      }
+
+      function touchStarted() {
+        if (gameState === "start") {
+          initializeGame();
+          gameState = "playing";
+          // Also focus canvas on touch start to enable keyboard fallbacks
+          document.querySelector("canvas").focus();
+          return false;
+        }
+
+        if (gameState === "playing") {
+          const t = touches[touches.length - 1];
+
+          // Store the touch ID to track it
+          if (t && t.id !== undefined) {
+            activeTouchIds[t.id] = {
+              startX: t.x,
+              startY: t.y,
+              time: millis(),
+            };
+          }
+
+          if (dist(t.x, t.y, jumpBtn.x, jumpBtn.y) <= jumpBtn.r) {
+            jumpBufferTimer = 6;
+            tryPerformJump();
+            return false;
+          }
+
+          // Use our improved throw handler - only on touchStart
+          if (handleThrowInput(t.x, t.y)) {
+            return false;
+          }
+
+          return false;
+        }
+        return false;
+      }
+
+      // Add touchEnded handler to prevent double throws
+      function touchEnded() {
+        // We never want to throw on touch end - ignore the event completely for throw purposes
+
+        // Clean up the touch tracking if we have an ID
+        if (touches.length > 0) {
+          const t = touches[touches.length - 1];
+          if (t && t.id !== undefined) {
+            delete activeTouchIds[t.id];
+          }
+        }
+
+        return false;
+      }
+
+      function handleThrowInput(mx, my) {
+        // Apply debounce - prevent rapid consecutive throws
+        const currentTime = millis();
+        if (currentTime - lastThrowTime < THROW_COOLDOWN) {
+          return false; // Too soon since last throw
+        }
+
+        // Handle touch type detection - only allow throws on initial touch
+        if (touches && touches.length > 0) {
+          // This is a touch-sourced event
+          let touchEvent = false;
+
+          for (let i = 0; i < touches.length; i++) {
+            const t = touches[i];
+            // Check if this is a new touch or a moved touch
+            if (t.id !== undefined && activeTouchIds[t.id]) {
+              const touchInfo = activeTouchIds[t.id];
+
+              // If this touch has moved a lot, it might be trying to control the joystick
+              // so don't treat it as a throw attempt
+              const moveDistance = dist(t.x, t.y, touchInfo.startX, touchInfo.startY);
+              if (moveDistance > 20) {
+                return false;
+              }
+
+              touchEvent = true;
+            }
+          }
+
+          // If it's not from our trackable touch events, don't allow the throw
+          if (!touchEvent) {
+            return false;
+          }
+        }
+
+        // Is this a valid throw input?
+        if (
+          dist(mx, my, joystick.x, joystick.y) <= joystick.activeRadius ||
+          dist(mx, my, jumpBtn.x, jumpBtn.y) <= jumpBtn.r
+        ) {
+          return false; // Don't throw if clicking controls
+        }
+
+        // Calculate world coordinates
+        const wsx = player.x;
+        const wsy = player.y - FRAME_HEIGHT * 1.5; // Throw from higher point
+        const wex = cameraX + mx;
+        const wey = cameraY + my;
+
+        // Calculate direction and power
+        const dxRaw = wex - wsx;
+        const dyRaw = wey - wsy;
+        const distRaw = sqrt(dxRaw * dxRaw + dyRaw * dyRaw);
+
+        // Add minimum throw distance to ensure intentionality
+        if (distRaw < 20) return false;
+
+        const eff = min(distRaw, NOGGLE_MAX_DISTANCE);
+        const speed = customMap(eff, 0, NOGGLE_MAX_DISTANCE, NOGGLE_MAX_SPEED * 0.5, NOGGLE_MAX_SPEED);
+        const angle = atan2(dyRaw, dxRaw);
+        const dx = cos(angle) * speed;
+        const dy = sin(angle) * speed;
+
+        // Add trail particles for the noggle
+        const noggleColor = color(255, 50, 50, 150);
+
+        // Create throw with proper initial velocity and enhanced properties
+        noggles.push({
+          x: wsx,
+          y: wsy,
+          vx: dx,
+          vy: dy,
+          r: 10,
+          angle: angle, // Start at angle of throw
+          angularVelocity: random(-0.3, 0.3), // More rotation variation
+          throwFrame: frameCount, // Track when thrown for effects
+          hasTrail: true, // Flag to enable particle trail
+          trailColor: noggleColor, // Store the trail color
+        });
+
+        // Add throw animation to player with more dramatic effect
+        player.throwSquash = 1.5; // Increased for more visual impact
+
+        // Create throw particles
+        for (let i = 0; i < 12; i++) {
+          const particleAngle = angle + random(-0.5, 0.5);
+          const particleSpeed = random(1, 5);
+          particles.push({
+            x: wsx,
+            y: wsy,
+            vx: cos(particleAngle) * particleSpeed,
+            vy: sin(particleAngle) * particleSpeed,
+            size: random(2, 6),
+            life: random(10, 25),
+            color: noggleColor,
+          });
+        }
+
+        // Provide feedback
+        if (window.FarcadeSDK?.singlePlayer) {
+          window.FarcadeSDK.singlePlayer.actions.hapticFeedback();
+        }
+
+        // Update the last throw time for debouncing
+        lastThrowTime = currentTime;
+
+        return true;
+      }
+
+      // Optional audio mute control
+      function setMuted(isMuted) {
+        // implement pausing/resuming audio
+      }
+    </script>
+  </body>
+</html>
