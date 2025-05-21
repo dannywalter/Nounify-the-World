@@ -329,9 +329,11 @@
       const TOTAL_THING_ROWS = 4;
       const TOTAL_THING_FRAMES = THING_FRAMES_PER_ROW * TOTAL_THING_ROWS;
 
-      // Particle system optimization
+      // Performance optimization constants
       const MAX_PARTICLES = 120; // Maximum particles allowed at once
       const PARTICLE_CULLING_DISTANCE = 1000; // Remove particles far from view
+      const PLATFORM_CULLING_DISTANCE = 1200; // Only process platforms near the viewport
+      const THING_CULLING_DISTANCE = 1200; // Only process collectible things near the viewport
 
       // animation constants
       const FRAME_WIDTH = 48,
@@ -371,6 +373,122 @@
         tagTimer = TAG_TIMER_MAX,
         previousJumpState = false; // Track jump button state for edge detection
 
+      // Performance management variables
+      let performanceProfile = "high"; // "high", "medium", or "low"
+      let targetFrameRate = 60; // Target frame rate
+      let lastPerformanceCheck = 0;
+      let performanceCheckInterval = 60; // Check every 60 frames
+      let isInitialPerformanceDetected = false;
+      
+      // Create a particle pool for more efficient memory usage
+      const PARTICLE_POOL_SIZE = 200;
+      let particlePool = [];
+      
+      // Initialize particle pool
+      function initParticlePool() {
+        particlePool = [];
+        for (let i = 0; i < PARTICLE_POOL_SIZE; i++) {
+          particlePool.push({
+            active: false,
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            size: 0,
+            life: 0, maxLife: 0,
+            color: color(0),
+            type: "default",
+            // More properties that might be used
+            text: null,
+            textSize: 0,
+            angle: 0,
+            rotationSpeed: 0
+          });
+        }
+      }
+      
+      // Get a particle from the pool
+      function getParticle() {
+        // First, try to find an inactive particle
+        for (let i = 0; i < particlePool.length; i++) {
+          if (!particlePool[i].active) {
+            particlePool[i].active = true;
+            return particlePool[i];
+          }
+        }
+        
+        // If no inactive particles, create a new one if pool not full
+        if (particlePool.length < PARTICLE_POOL_SIZE) {
+          const newParticle = {
+            active: true,
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            size: 0,
+            life: 0, maxLife: 0,
+            color: color(0),
+            type: "default",
+            text: null,
+            textSize: 0,
+            angle: 0,
+            rotationSpeed: 0
+          };
+          particlePool.push(newParticle);
+          return newParticle;
+        }
+        
+        // If pool is full, repurpose the oldest particle
+        const oldestIndex = particles.length > 0 ? 0 : -1;
+        if (oldestIndex >= 0) {
+          particlePool[oldestIndex].active = true;
+          return particlePool[oldestIndex];
+        }
+        
+        // Fallback - create a one-off particle not in the pool
+        return {
+          active: true,
+          x: 0, y: 0,
+          vx: 0, vy: 0,
+          size: 0,
+          life: 0, maxLife: 0,
+          color: color(0),
+          type: "default"
+        };
+      }
+      
+      // Create a particle with the given properties
+      function createParticle(properties) {
+        // Check performance first
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 45;
+        
+        // Skip non-essential particles in low performance mode
+        if (lowPerformanceMode && properties.type === "sparkle" && random() < 0.7) {
+          return null;
+        }
+        
+        // Only create particles if under the limit
+        if (particles.length >= (lowPerformanceMode ? MAX_PARTICLES * 0.5 : MAX_PARTICLES)) {
+          return null;
+        }
+        
+        // Get a particle from the pool
+        const p = getParticle();
+        
+        // Set all properties
+        Object.assign(p, properties);
+        
+        // Ensure essential properties have defaults
+        p.maxLife = p.maxLife || p.life || 20;
+        p.vx = p.vx || 0;
+        p.vy = p.vy || 0;
+        p.size = p.size || 4;
+        p.color = p.color || color(255);
+        p.type = p.type || "default";
+        p.active = true;
+        
+        // Add to active particles array
+        particles.push(p);
+        return p;
+      }
+      
       // Debug mode variables
       let debugMode = false;
       let frameRateHistory = [];
@@ -485,6 +603,9 @@
         textAlign(CENTER, CENTER);
         imageMode(CENTER);
         colorMode(RGB, 255);
+        
+        // Initialize particle pool
+        initParticlePool();
 
         initializeGame();
         // Position the player lower on the screen (show more ahead)
@@ -824,6 +945,40 @@
           console.log(`[DEBUG] STATE: ${_prevState} → ${gameState}`);
           _prevState = gameState;
         }
+        
+        // Automatic performance detection and adaptation
+        if (frameCount % performanceCheckInterval === 0 || !isInitialPerformanceDetected) {
+          const currentFPS = frameRate();
+          
+          // Initial performance detection on first few frames
+          if (!isInitialPerformanceDetected && frameCount > 30) {
+            // Set initial performance profile based on first readings
+            if (currentFPS < 40) {
+              performanceProfile = "low";
+              console.log("Initial performance detection: LOW performance device");
+            } else if (currentFPS < 55) {
+              performanceProfile = "medium";
+              console.log("Initial performance detection: MEDIUM performance device");
+            } else {
+              performanceProfile = "high";
+              console.log("Initial performance detection: HIGH performance device");
+            }
+            
+            // Adjust game settings based on performance profile
+            if (performanceProfile === "low") {
+              // Reduce cloud count
+              clouds = clouds.slice(0, Math.floor(clouds.length / 2));
+              // Adjust particle limits
+              MAX_PARTICLES = 60;
+            }
+            
+            isInitialPerformanceDetected = true;
+          }
+          
+          // Ongoing performance monitoring
+          lastPerformanceCheck = frameCount;
+        }
+        
         background("#63A0F9");
         drawClouds();
 
@@ -870,7 +1025,7 @@
         // Setup for debug text
         push();
         fill(0, 0, 0, 180);
-        rect(10, 10, 200, 170); // Made taller for additional info
+        rect(10, 10, 250, 210); // Made taller for additional performance info
 
         // FPS display color based on performance
         if (lowPerformanceMode) {
@@ -891,27 +1046,39 @@
         } else {
           text("Performance: GOOD", 20, 40);
         }
+        
+        // Display performance profile
+        fill(255, 200, 100);
+        text(`Performance Profile: ${performanceProfile.toUpperCase()}`, 20, 60);
+        
+        // Display active objects counts
+        text(`Particles: ${particles.length}/${MAX_PARTICLES}`, 20, 80);
+        
+        // Count visible platforms
+        const visiblePlatforms = platforms.filter(
+          p => p.x < cameraX + width + PLATFORM_CULLING_DISTANCE && 
+               p.x + p.w > cameraX - PLATFORM_CULLING_DISTANCE
+        );
+        text(`Visible Platforms: ${visiblePlatforms.length}/${platforms.length}`, 20, 100);
+        
+        // Memory usage estimate (not accurate but gives an idea)
+        text(`Estimated Mem: ${Math.round(window.performance?.memory?.usedJSHeapSize / 1024 / 1024) || 'N/A'} MB`, 20, 120);
 
         fill(255, 255, 0); // Yellow for other debug info
 
         // Display current position in level
         const levelProgress = player.x / LEVEL_LENGTH;
-        text(`Level progress: ${(levelProgress * 100).toFixed(2)}%`, 20, 60);
+        text(`Level progress: ${(levelProgress * 100).toFixed(2)}%`, 20, 140);
 
         // Display current zone
         let currentZone = "Normal";
         if (levelProgress >= INTRO_ZONES.crumbling.start) currentZone = "Crumbling";
         else if (levelProgress >= INTRO_ZONES.moving.start) currentZone = "Moving";
         else if (levelProgress >= INTRO_ZONES.bouncy.start) currentZone = "Bouncy";
-        text(`Current zone: ${currentZone}`, 20, 80);
+        text(`Current zone: ${currentZone}`, 20, 160);
 
         // Player position
-        text(`Player pos: ${Math.round(player.x)}, ${Math.round(player.y)}`, 20, 100);
-
-        // Controls help
-        text("Debug Controls:", 20, 120);
-        text("D: Toggle debug mode", 20, 140);
-        text("1-5: Teleport to zones", 20, 160);
+        text(`Player pos: ${Math.round(player.x)}, ${Math.round(player.y)}`, 20, 180);
 
         pop();
 
@@ -934,6 +1101,19 @@
             text(zone, boundaryX + 10, cameraY + 50);
           }
         }
+        pop();
+        
+        // Controls help - display at the bottom
+        push();
+        fill(0, 0, 0, 150);
+        rect(10, height - 65, 220, 55);
+        fill(200, 200, 200);
+        textAlign(LEFT, TOP);
+        textSize(12);
+        text("Debug Controls:", 20, height - 60);
+        text("D: Toggle debug mode", 20, height - 45);
+        text("1-5: Teleport to zones", 20, height - 30);
+        text("P: Toggle performance profile", 20, height - 15);
         pop();
       }
 
@@ -1026,31 +1206,49 @@
       }
 
       function updateAndDrawParticles() {
-        // Enforce particle limit before processing
-        if (particles.length > MAX_PARTICLES) {
-          // Remove oldest particles when over limit
-          particles.splice(0, particles.length - MAX_PARTICLES);
-        }
-
         // Get current performance level
         const currentFPS = frameRate();
         const lowPerformanceMode = currentFPS < 40;
+        
+        // Dynamically adjust particle limit based on performance
+        const effectiveParticleLimit = lowPerformanceMode ? 
+          Math.floor(MAX_PARTICLES * 0.5) : MAX_PARTICLES;
+        
+        // Enforce particle limit before processing
+        if (particles.length > effectiveParticleLimit) {
+          // Remove oldest particles when over limit
+          particles.splice(0, particles.length - effectiveParticleLimit);
+        }
 
         push();
         translate(-cameraX, -cameraY);
         noStroke();
 
+        // Define visible area for culling
+        const visibleLeft = cameraX - PARTICLE_CULLING_DISTANCE;
+        const visibleRight = cameraX + width + PARTICLE_CULLING_DISTANCE;
+        const visibleTop = cameraY - PARTICLE_CULLING_DISTANCE;
+        const visibleBottom = cameraY + height + PARTICLE_CULLING_DISTANCE;
+
         for (let i = particles.length - 1; i >= 0; i--) {
           const p = particles[i];
 
-          // Cull distant particles that aren't visible
+          // Skip update and draw for particles far outside view
           if (
-            p.x < cameraX - PARTICLE_CULLING_DISTANCE ||
-            p.x > cameraX + width + PARTICLE_CULLING_DISTANCE ||
-            p.y < cameraY - PARTICLE_CULLING_DISTANCE ||
-            p.y > cameraY + height + PARTICLE_CULLING_DISTANCE
+            p.x < visibleLeft ||
+            p.x > visibleRight ||
+            p.y < visibleTop ||
+            p.y > visibleBottom
           ) {
-            particles.splice(i, 1);
+            // Only remove if they're extremely far away (optimization)
+            if (
+              p.x < visibleLeft - PARTICLE_CULLING_DISTANCE ||
+              p.x > visibleRight + PARTICLE_CULLING_DISTANCE ||
+              p.y < visibleTop - PARTICLE_CULLING_DISTANCE ||
+              p.y > visibleBottom + PARTICLE_CULLING_DISTANCE
+            ) {
+              particles.splice(i, 1);
+            }
             continue;
           }
 
@@ -1082,6 +1280,9 @@
           p.life -= 1;
 
           if (p.life <= 0) {
+            // Instead of removing, mark as inactive for reuse
+            p.active = false;
+            // Remove from active particles array
             particles.splice(i, 1);
             continue;
           }
@@ -1090,7 +1291,7 @@
           const maxLife = p.maxLife || 20;
           const alpha = map(p.life, 0, maxLife, 0, 255);
 
-          // Draw different particle types
+          // Draw different particle types - with optimizations for low performance mode
           if (p.type === "debris") {
             // Draw rectangular debris
             push();
@@ -1102,7 +1303,12 @@
           } else if (p.type === "sparkle") {
             // Reduce expensive shadow effects in low performance mode
             if (!lowPerformanceMode) {
-              drawingContext.shadowBlur = p.size;
+              // Use more efficient shadow setting - only apply shadows to special particles
+              // and with reduced intensity when performance is borderline
+              const shadowIntensity = currentFPS < 50 ? 
+                p.size * 0.5 : p.size;
+                
+              drawingContext.shadowBlur = shadowIntensity;
               drawingContext.shadowColor = color(255, 255, 200, alpha);
             }
             fill(255, 255, 200, alpha);
@@ -1116,12 +1322,25 @@
             circle(p.x, p.y, p.size);
           }
 
-          // Draw text if particle has text property and not in low performance mode
+          // Draw text if particle has text property
+          // Skip text in low performance mode unless it's specifically a text particle
           if (p.text && (!lowPerformanceMode || p.type === "text")) {
             fill(255, alpha);
             textAlign(CENTER, CENTER);
             textSize(p.textSize || 10);
+            
+            // Reduced drop shadow in low performance mode
+            if (!lowPerformanceMode) {
+              drawingContext.shadowBlur = 2;
+              drawingContext.shadowColor = 'rgba(0,0,0,0.5)';
+            }
+            
             text(p.text, p.x, p.y - (p.size + 5));
+            
+            if (!lowPerformanceMode) {
+              drawingContext.shadowBlur = 0;
+            }
+          }
             textAlign(CENTER, CENTER);
           }
         }
@@ -1180,9 +1399,20 @@
 
         // Get current performance level
         const currentFPS = frameRate();
-        const lowPerformanceMode = currentFPS < 30;
+        const lowPerformanceMode = currentFPS < 45; // Less aggressive threshold
 
-        // Calculate dimensions for gradients (these were missing!)
+        // In very low performance situations, use a much simpler effect
+        if (lowPerformanceMode && currentFPS < 30) {
+          // Ultra simplified version - just a red transparent overlay
+          push();
+          noStroke();
+          fill(255, 0, 0, intensity * 20);
+          rect(0, 0, width, height);
+          pop();
+          return;
+        }
+
+        // Calculate dimensions for gradients
         const minDim = min(width, height);
         const maxDim = max(width, height);
 
@@ -1255,25 +1485,61 @@
       }
 
       function drawClouds() {
+        // Get current performance level for optimization
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 50;
+        
+        // Skip half of clouds in low performance mode
+        const cloudRenderLimit = lowPerformanceMode ? 
+          Math.floor(clouds.length / 2) : clouds.length;
+        
         imageMode(CENTER);
         noTint();
-        clouds.forEach((c) => {
+        
+        // Define viewport boundaries for culling
+        const visibleLeft = cameraX - width * 0.5;
+        const visibleRight = cameraX + width * 1.5;
+        
+        // Only process visible clouds
+        for (let i = 0; i < cloudRenderLimit; i++) {
+          const c = clouds[i];
           const sx = c.x - cameraX * c.speedFactor;
+          
+          // Skip clouds outside the view area
+          if (sx < visibleLeft || sx > visibleRight) {
+            continue;
+          }
+          
           image(cloudImg, sx, c.y, cloudImg.width * c.size, cloudImg.height * c.size);
-        });
+        }
       }
 
       function drawPlatforms() {
+        // Define viewport culling boundaries
+        const visibleLeft = cameraX - PLATFORM_CULLING_DISTANCE;
+        const visibleRight = cameraX + width + PLATFORM_CULLING_DISTANCE;
+        const visibleTop = cameraY - PLATFORM_CULLING_DISTANCE;
+        const visibleBottom = cameraY + height + PLATFORM_CULLING_DISTANCE;
+        
+        // Get current performance level
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 45;
+        
         // Draw difficulty-based trail particles for platforms in later zones
         // This runs once per frame before drawing platforms
         platforms.forEach((p) => {
-          // Only create trail particles for platforms that are within view
-          if (p.x + p.w < cameraX || p.x > cameraX + width) {
+          // Enhanced culling - skip platforms far outside view
+          if (p.x + p.w < visibleLeft || 
+              p.x > visibleRight || 
+              p.y + p.h < visibleTop || 
+              p.y > visibleBottom) {
             return; // Skip off-screen platforms
           }
 
-          // Create difficulty trail particles based on zone progression
-          if (p.zoneDifficulty > 0.4 && frameCount % 10 === 0) {
+          // Create difficulty trail particles based on zone progression - with performance optimization
+          if (p.zoneDifficulty > 0.4 && 
+              frameCount % (lowPerformanceMode ? 20 : 10) === 0 && 
+              !lowPerformanceMode) {
             const difficultyIntensity = map(p.zoneDifficulty, 0.4, 1.0, 0.2, 1.0);
 
             // Create different trail effects based on platform type and difficulty
@@ -1626,8 +1892,24 @@
       }
 
       function drawThings() {
+        // Define viewport boundaries for culling
+        const visibleLeft = cameraX - THING_CULLING_DISTANCE;
+        const visibleRight = cameraX + width + THING_CULLING_DISTANCE;
+        const visibleTop = cameraY - THING_CULLING_DISTANCE;
+        const visibleBottom = cameraY + height + THING_CULLING_DISTANCE;
+        
+        // Get current performance mode
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 45; // Less restrictive threshold for things
+        
         imageMode(CENTER);
         things.forEach((t) => {
+          // Skip things that are far off-screen
+          if (t.x < visibleLeft || t.x > visibleRight || 
+              t.y < visibleTop || t.y > visibleBottom) {
+            return;
+          }
+          
           const bob = sin(frameCount * THING_BOB_SPEED + t.phase) * THING_BOB_AMPLITUDE;
           const sheet = t.collected ? thingSpriteSheet : thingSpriteSheetGrey;
           const col = t.frameIndex % THING_FRAMES_PER_ROW;
@@ -1996,12 +2278,19 @@
           // Keep timer for animation purposes but don't apply scaling
           player.jumpSquash = 1.5;
 
-          // Enhanced jump particles for better visual feedback
+          // Get current performance to adjust particle effects
+          const currentFPS = frameRate();
+          const lowPerformanceMode = currentFPS < 45;
+          
+          // Enhanced jump particles with performance adaptation
+          // Create fewer particles in low performance mode
+          const particleCount = lowPerformanceMode ? 5 : 15;
+          
           // Create a dust cloud effect at player's feet
-          for (let i = 0; i < 15; i++) {
+          for (let i = 0; i < particleCount; i++) {
             const angle = random(PI / 6, (5 * PI) / 6);
             const speed = random(1, 4);
-            particles.push({
+            createParticle({
               x: player.x + random(-10, 10),
               y: player.y + player.height / 2,
               vx: cos(angle) * speed * (random() > 0.5 ? -1 : 1),
@@ -2014,9 +2303,9 @@
             });
           }
 
-          // Add text effect occasionally
-          if (random() < 0.3) {
-            particles.push({
+          // Add text effect occasionally - but not in low performance mode
+          if (random() < 0.3 && !lowPerformanceMode) {
+            createParticle({
               x: player.x,
               y: player.y - 20,
               vx: 0,
@@ -2046,8 +2335,17 @@
         // Apply normal horizontal movement
         player.x += player.velocityX;
 
+        // Define culling boundaries around the player's viewport
+        const viewportLeft = cameraX - PLATFORM_CULLING_DISTANCE;
+        const viewportRight = cameraX + width + PLATFORM_CULLING_DISTANCE;
+        
+        // Get only platforms within the culling area - major performance optimization
+        const visiblePlatforms = platforms.filter(
+          p => p.x < viewportRight && p.x + p.w > viewportLeft
+        );
+
         // First handle horizontal collisions
-        platforms.forEach((p) => {
+        visiblePlatforms.forEach((p) => {
           if (isColliding(player, p)) {
             // Don't resolve horizontal collision for moving platforms when standing on top
             if (p.type === "moving" && player.isOnGround && player.y <= p.y + 1) {
@@ -2075,7 +2373,7 @@
         player.isOnGround = false;
 
         // Handle platform collisions and special platform behaviors
-        platforms.forEach((p) => {
+        visiblePlatforms.forEach((p) => {
           if (isColliding(player, p)) {
             const prevBot = player.y - player.velocityY + player.height / 2;
 
@@ -2659,6 +2957,22 @@
             // 'D' key (keyCode 68)
             debugMode = !debugMode;
             console.log("Debug mode: " + (debugMode ? "ON" : "OFF"));
+          }
+          
+          // Performance profile toggle (P key)
+          if (keyCode === 80 && debugMode) {
+            // Cycle through performance profiles
+            if (performanceProfile === "high") {
+              performanceProfile = "medium";
+              MAX_PARTICLES = 80;
+            } else if (performanceProfile === "medium") {
+              performanceProfile = "low";
+              MAX_PARTICLES = 60;
+            } else {
+              performanceProfile = "high";
+              MAX_PARTICLES = 120;
+            }
+            console.log(`Switched to ${performanceProfile.toUpperCase()} performance profile`);
           }
 
           // Zone teleport in debug mode
