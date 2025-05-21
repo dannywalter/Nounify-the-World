@@ -229,6 +229,11 @@
 
             initializeGame();
 
+            // Reset camera position immediately to match player
+            // This prevents checkFallen from triggering immediately on game restart
+            cameraX = 0;
+            cameraY = initialCameraY;
+            
             console.log("[DEBUG] ✔ initializeGame() done  |  after-init:", {
               gameState,
               score,
@@ -329,8 +334,8 @@
       const TOTAL_THING_ROWS = 4;
       const TOTAL_THING_FRAMES = THING_FRAMES_PER_ROW * TOTAL_THING_ROWS;
 
-      // Performance optimization constants
-      const MAX_PARTICLES = 120; // Maximum particles allowed at once
+      // Performance optimization variables
+      let MAX_PARTICLES = 120; // Maximum particles allowed at once (can be adjusted based on performance)
       const PARTICLE_CULLING_DISTANCE = 1000; // Remove particles far from view
       const PLATFORM_CULLING_DISTANCE = 1200; // Only process platforms near the viewport
       const THING_CULLING_DISTANCE = 1200; // Only process collectible things near the viewport
@@ -2927,6 +2932,10 @@
       }
 
       function checkFallen() {
+        // Only check if the game is actually in a playing state
+        // This prevents false game overs during game reset
+        if (gameState !== "playing") return;
+        
         // if player falls off bottom of screen…
         if (player.y - player.height / 2 > cameraY + height * 2) {
           console.log("[DEBUG] checkFallen → gameOver", {
