@@ -565,6 +565,51 @@
         );
       }
 
+      // Apply performance settings based on current profile
+      function applyPerformanceSettings() {
+        console.log(`Applying ${performanceProfile} performance profile settings`);
+        
+        switch (performanceProfile) {
+          case "low":
+            // Aggressive optimizations for low-end devices
+            MAX_PARTICLES = 60;
+            PARTICLE_CULLING_DISTANCE = 600; // Tighter culling
+            PLATFORM_CULLING_DISTANCE = 800;
+            THING_CULLING_DISTANCE = 800;
+            break;
+            
+          case "medium":
+            // Balanced optimizations
+            MAX_PARTICLES = 80;
+            PARTICLE_CULLING_DISTANCE = 800;
+            PLATFORM_CULLING_DISTANCE = 1000;
+            THING_CULLING_DISTANCE = 1000;
+            break;
+            
+          case "high":
+          default:
+            // Full quality for high-end devices
+            MAX_PARTICLES = 120;
+            PARTICLE_CULLING_DISTANCE = 1000;
+            PLATFORM_CULLING_DISTANCE = 1200;
+            THING_CULLING_DISTANCE = 1200;
+            break;
+        }
+      }
+      
+      // Helper function to set performance profile and apply settings
+      function setPerformanceProfile(profile) {
+        if (profile === performanceProfile) return;
+        
+        performanceProfile = profile;
+        applyPerformanceSettings();
+        
+        // Adjust particle count if needed
+        if (particles.length > MAX_PARTICLES) {
+          particles.splice(0, particles.length - MAX_PARTICLES);
+        }
+      }
+      
       function setup() {
         pixelDensity(window.devicePixelRatio || 1);
         let cnv = createCanvas(500, 800).parent("game-container");
@@ -628,6 +673,13 @@
           brightKeys = Object.keys(brightPalettes);
         activeDullPalette = dullPalettes[dullKeys[floor(random(dullKeys.length))]];
         activeBrightPalette = brightPalettes[brightKeys[floor(random(brightKeys.length))]];
+
+        // Reset the particle system
+        particles = [];
+        initParticlePool();
+        
+        // Apply current performance profile settings
+        applyPerformanceSettings();
 
         noggles = [];
         score = 0;
@@ -954,29 +1006,38 @@
           if (!isInitialPerformanceDetected && frameCount > 30) {
             // Set initial performance profile based on first readings
             if (currentFPS < 40) {
-              performanceProfile = "low";
+              setPerformanceProfile("low");
               console.log("Initial performance detection: LOW performance device");
             } else if (currentFPS < 55) {
-              performanceProfile = "medium";
+              setPerformanceProfile("medium");
               console.log("Initial performance detection: MEDIUM performance device");
             } else {
-              performanceProfile = "high";
+              setPerformanceProfile("high");
               console.log("Initial performance detection: HIGH performance device");
-            }
-            
-            // Adjust game settings based on performance profile
-            if (performanceProfile === "low") {
-              // Reduce cloud count
-              clouds = clouds.slice(0, Math.floor(clouds.length / 2));
-              // Adjust particle limits
-              MAX_PARTICLES = 60;
             }
             
             isInitialPerformanceDetected = true;
           }
           
-          // Ongoing performance monitoring
-          lastPerformanceCheck = frameCount;
+          // Ongoing performance monitoring and adjustment
+          if (isInitialPerformanceDetected && frameCount % (performanceCheckInterval * 5) === 0) {
+            // Calculate average FPS over time
+            const avgFps = frameRateHistory.length > 0
+               ? frameRateHistory.reduce((a, b) => a + b, 0) / frameRateHistory.length
+               : currentFPS;
+               
+            // Adjust performance profile if needed
+            if (avgFps < 35 && performanceProfile !== "low") {
+              console.log(`FPS too low (${avgFps.toFixed(1)}), switching to LOW performance profile`);
+              setPerformanceProfile("low");
+            } else if (avgFps < 50 && avgFps >= 35 && performanceProfile === "high") {
+              console.log(`FPS moderate (${avgFps.toFixed(1)}), switching to MEDIUM performance profile`);
+              setPerformanceProfile("medium");
+            } else if (avgFps > 58 && performanceProfile === "low") {
+              console.log(`FPS improved (${avgFps.toFixed(1)}), switching to MEDIUM performance profile`);
+              setPerformanceProfile("medium");
+            }
+          }
         }
         
         background("#63A0F9");
@@ -1158,9 +1219,16 @@
       }
 
       function updateCamera() {
+        // Get performance level to adjust camera movement
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 45;
+        
         // Show more horizontal space by moving camera more gently
+        // Adjust horizontal smoothing based on performance
+        const horizontalLerpFactor = lowPerformanceMode ? 0.03 : 0.05;
+        
         const tx = player.x - width * 0.35;
-        cameraX = constrain(lerp(cameraX, tx, 0.05), 0, max(levelWidth - width, 0)); // Reduced from 0.1 to 0.05
+        cameraX = constrain(lerp(cameraX, tx, horizontalLerpFactor), 0, max(levelWidth - width, 0));
 
         // Use more relaxed vertical thresholds to reduce camera movement
         const lookDownThreshold = height * 0.6; // Increased from 0.55 to 0.6
@@ -1172,18 +1240,23 @@
         // Determine target camera Y position with more relaxed rules
         let targetY = cameraY; // Default to keeping current position
 
-        // Only move camera if player is significantly outside comfort zone
-        if (playerScreenY > lookDownThreshold && player.velocityY > 2) {
-          // Only look down when falling with some velocity and well below threshold
-          targetY = player.y - lookDownThreshold + player.velocityY * 1.5; // Reduced from 3 to 1.5
-        }
-        // Only move camera up if player is significantly above the threshold
-        else if (playerScreenY < lookUpThreshold) {
-          targetY = player.y - lookUpThreshold;
+        // Skip vertical camera updates in very low performance situations
+        if (!lowPerformanceMode || frameCount % 2 === 0) {
+          // Only move camera if player is significantly outside comfort zone
+          if (playerScreenY > lookDownThreshold && player.velocityY > 2) {
+            // Only look down when falling with some velocity and well below threshold
+            targetY = player.y - lookDownThreshold + player.velocityY * 1.5; // Reduced from 3 to 1.5
+          }
+          // Only move camera up if player is significantly above the threshold
+          else if (playerScreenY < lookUpThreshold) {
+            targetY = player.y - lookUpThreshold;
+          }
         }
 
-        // Apply much slower vertical camera movement
-        const verticalLerpFactor = player.velocityY > 5 ? 0.04 : 0.01; // Reduced from 0.08/0.02 to 0.04/0.01
+        // Apply much slower vertical camera movement - adjust based on performance
+        const verticalLerpFactor = lowPerformanceMode ? 
+          (player.velocityY > 5 ? 0.02 : 0.008) : 
+          (player.velocityY > 5 ? 0.04 : 0.01);
 
         // Add a deadzone where camera doesn't move at all for small changes
         if (Math.abs(targetY - cameraY) > 5) {
@@ -2963,14 +3036,11 @@
           if (keyCode === 80 && debugMode) {
             // Cycle through performance profiles
             if (performanceProfile === "high") {
-              performanceProfile = "medium";
-              MAX_PARTICLES = 80;
+              setPerformanceProfile("medium");
             } else if (performanceProfile === "medium") {
-              performanceProfile = "low";
-              MAX_PARTICLES = 60;
+              setPerformanceProfile("low");
             } else {
-              performanceProfile = "high";
-              MAX_PARTICLES = 120;
+              setPerformanceProfile("high");
             }
             console.log(`Switched to ${performanceProfile.toUpperCase()} performance profile`);
           }
