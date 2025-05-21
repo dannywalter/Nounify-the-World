@@ -565,51 +565,6 @@
         );
       }
 
-      // Apply performance settings based on current profile
-      function applyPerformanceSettings() {
-        console.log(`Applying ${performanceProfile} performance profile settings`);
-        
-        switch (performanceProfile) {
-          case "low":
-            // Aggressive optimizations for low-end devices
-            MAX_PARTICLES = 60;
-            PARTICLE_CULLING_DISTANCE = 600; // Tighter culling
-            PLATFORM_CULLING_DISTANCE = 800;
-            THING_CULLING_DISTANCE = 800;
-            break;
-            
-          case "medium":
-            // Balanced optimizations
-            MAX_PARTICLES = 80;
-            PARTICLE_CULLING_DISTANCE = 800;
-            PLATFORM_CULLING_DISTANCE = 1000;
-            THING_CULLING_DISTANCE = 1000;
-            break;
-            
-          case "high":
-          default:
-            // Full quality for high-end devices
-            MAX_PARTICLES = 120;
-            PARTICLE_CULLING_DISTANCE = 1000;
-            PLATFORM_CULLING_DISTANCE = 1200;
-            THING_CULLING_DISTANCE = 1200;
-            break;
-        }
-      }
-      
-      // Helper function to set performance profile and apply settings
-      function setPerformanceProfile(profile) {
-        if (profile === performanceProfile) return;
-        
-        performanceProfile = profile;
-        applyPerformanceSettings();
-        
-        // Adjust particle count if needed
-        if (particles.length > MAX_PARTICLES) {
-          particles.splice(0, particles.length - MAX_PARTICLES);
-        }
-      }
-      
       function setup() {
         pixelDensity(window.devicePixelRatio || 1);
         let cnv = createCanvas(500, 800).parent("game-container");
@@ -673,13 +628,6 @@
           brightKeys = Object.keys(brightPalettes);
         activeDullPalette = dullPalettes[dullKeys[floor(random(dullKeys.length))]];
         activeBrightPalette = brightPalettes[brightKeys[floor(random(brightKeys.length))]];
-
-        // Reset the particle system
-        particles = [];
-        initParticlePool();
-        
-        // Apply current performance profile settings
-        applyPerformanceSettings();
 
         noggles = [];
         score = 0;
@@ -1006,38 +954,29 @@
           if (!isInitialPerformanceDetected && frameCount > 30) {
             // Set initial performance profile based on first readings
             if (currentFPS < 40) {
-              setPerformanceProfile("low");
+              performanceProfile = "low";
               console.log("Initial performance detection: LOW performance device");
             } else if (currentFPS < 55) {
-              setPerformanceProfile("medium");
+              performanceProfile = "medium";
               console.log("Initial performance detection: MEDIUM performance device");
             } else {
-              setPerformanceProfile("high");
+              performanceProfile = "high";
               console.log("Initial performance detection: HIGH performance device");
+            }
+            
+            // Adjust game settings based on performance profile
+            if (performanceProfile === "low") {
+              // Reduce cloud count
+              clouds = clouds.slice(0, Math.floor(clouds.length / 2));
+              // Adjust particle limits
+              MAX_PARTICLES = 60;
             }
             
             isInitialPerformanceDetected = true;
           }
           
-          // Ongoing performance monitoring and adjustment
-          if (isInitialPerformanceDetected && frameCount % (performanceCheckInterval * 5) === 0) {
-            // Calculate average FPS over time
-            const avgFps = frameRateHistory.length > 0
-               ? frameRateHistory.reduce((a, b) => a + b, 0) / frameRateHistory.length
-               : currentFPS;
-               
-            // Adjust performance profile if needed
-            if (avgFps < 35 && performanceProfile !== "low") {
-              console.log(`FPS too low (${avgFps.toFixed(1)}), switching to LOW performance profile`);
-              setPerformanceProfile("low");
-            } else if (avgFps < 50 && avgFps >= 35 && performanceProfile === "high") {
-              console.log(`FPS moderate (${avgFps.toFixed(1)}), switching to MEDIUM performance profile`);
-              setPerformanceProfile("medium");
-            } else if (avgFps > 58 && performanceProfile === "low") {
-              console.log(`FPS improved (${avgFps.toFixed(1)}), switching to MEDIUM performance profile`);
-              setPerformanceProfile("medium");
-            }
-          }
+          // Ongoing performance monitoring
+          lastPerformanceCheck = frameCount;
         }
         
         background("#63A0F9");
@@ -3036,11 +2975,14 @@
           if (keyCode === 80 && debugMode) {
             // Cycle through performance profiles
             if (performanceProfile === "high") {
-              setPerformanceProfile("medium");
+              performanceProfile = "medium";
+              MAX_PARTICLES = 80;
             } else if (performanceProfile === "medium") {
-              setPerformanceProfile("low");
+              performanceProfile = "low";
+              MAX_PARTICLES = 60;
             } else {
-              setPerformanceProfile("high");
+              performanceProfile = "high";
+              MAX_PARTICLES = 120;
             }
             console.log(`Switched to ${performanceProfile.toUpperCase()} performance profile`);
           }
