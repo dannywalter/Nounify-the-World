@@ -1103,6 +1103,67 @@
         cameraY = min(cameraY, initialCameraY);
       }
 
+      // Helper function to batch render particles of the same type
+      function batchRenderParticles(particleArray, type, lowPerformanceMode) {
+        // Group particles by similar visual properties for batch rendering
+        const groups = {};
+        
+        // Filter active particles of the specified type
+        particleArray.filter(p => p.active && p.type === type).forEach(p => {
+          // Calculate opacity (alpha)
+          const maxLife = p.maxLife || 20;
+          const alpha = map(p.life, 0, maxLife, 0, 255);
+          
+          // Get string representation of color for grouping
+          const colorKey = `${red(p.color)},${green(p.color)},${blue(p.color)}`;
+          
+          // Create key for grouping
+          const key = colorKey;
+          
+          if (!groups[key]) {
+            groups[key] = {
+              color: p.color,
+              alpha: alpha,
+              particles: []
+            };
+          }
+          
+          // Add particle to group
+          groups[key].particles.push(p);
+        });
+        
+        // Render each group of particles with a single fill call
+        Object.values(groups).forEach(group => {
+          fill(red(group.color), green(group.color), blue(group.color), group.alpha);
+          
+          // Apply shadow effect once per batch for sparkles
+          if (type === "sparkle" && !lowPerformanceMode) {
+            drawingContext.shadowBlur = group.particles[0].size;
+            drawingContext.shadowColor = color(255, 255, 200, group.alpha);
+          }
+          
+          // Draw all particles in this batch
+          group.particles.forEach(p => {
+            if (type === "debris") {
+              // Draw rectangular debris
+              push();
+              translate(p.x, p.y);
+              rotate(p.angle || 0);
+              rect(0, 0, p.size, p.size);
+              pop();
+            } else {
+              // Draw circular particle
+              circle(p.x, p.y, p.size);
+            }
+          });
+          
+          // Reset shadow effect
+          if (type === "sparkle" && !lowPerformanceMode) {
+            drawingContext.shadowBlur = 0;
+          }
+        });
+      }
+
       function updateAndDrawParticles() {
         // Dynamically adjust MAX_PARTICLES based on performance
         const currentFPS = frameRate();
@@ -1128,7 +1189,28 @@
         translate(-cameraX, -cameraY);
         noStroke();
 
-        // Process particles (update and draw)
+        // Use batched rendering for common particle types
+        batchRenderParticles(particles, "default", lowPerformanceMode);
+        batchRenderParticles(particles, "sparkle", lowPerformanceMode);
+        batchRenderParticles(particles, "debris", lowPerformanceMode);
+        
+        // Process text particles individually (can't be easily batched)
+        const textParticles = particles.filter(p => p.active && p.type === "text" && !p.markedForDeletion);
+        textParticles.forEach(p => {
+          // Calculate opacity based on lifespan
+          const maxLife = p.maxLife || 20;
+          const alpha = map(p.life, 0, maxLife, 0, 255);
+          
+          // Draw text
+          if (p.text && (!lowPerformanceMode || p.type === "text")) {
+            fill(255, alpha);
+            textAlign(CENTER, CENTER);
+            textSize(p.textSize || 10);
+            text(p.text, p.x, p.y - (p.size + 5));
+          }
+        });
+        
+        // Process particles (update physics)
         for (let i = particles.length - 1; i >= 0; i--) {
           const p = particles[i];
           
@@ -1138,7 +1220,6 @@
           // Handle particles marked for deletion
           if (p.markedForDeletion) {
             p.active = false;
-            // Don't splice, just mark inactive and skip processing
             continue;
           }
 
@@ -1183,45 +1264,6 @@
           if (p.life <= 0) {
             p.active = false;
             continue;
-          }
-
-          // Calculate opacity based on lifespan
-          const maxLife = p.maxLife || 20;
-          const alpha = map(p.life, 0, maxLife, 0, 255);
-
-          // Draw different particle types
-          if (p.type === "debris") {
-            // Draw rectangular debris
-            push();
-            fill(red(p.color), green(p.color), blue(p.color), alpha);
-            translate(p.x, p.y);
-            rotate(p.angle || 0);
-            rect(0, 0, p.size, p.size);
-            pop();
-          } else if (p.type === "sparkle") {
-            // Reduce expensive shadow effects in low performance mode
-            if (!lowPerformanceMode) {
-              drawingContext.shadowBlur = p.size;
-              drawingContext.shadowColor = color(255, 255, 200, alpha);
-            }
-            fill(255, 255, 200, alpha);
-            circle(p.x, p.y, p.size);
-            if (!lowPerformanceMode) {
-              drawingContext.shadowBlur = 0;
-            }
-          } else {
-            // Draw standard circular particle
-            fill(red(p.color), green(p.color), blue(p.color), alpha);
-            circle(p.x, p.y, p.size);
-          }
-
-          // Draw text if particle has text property and not in low performance mode
-          if (p.text && (!lowPerformanceMode || p.type === "text")) {
-            fill(255, alpha);
-            textAlign(CENTER, CENTER);
-            textSize(p.textSize || 10);
-            text(p.text, p.x, p.y - (p.size + 5));
-            textAlign(CENTER, CENTER);
           }
         }
         
@@ -1456,9 +1498,13 @@
 
             // Create falling debris when timer expires
             if (p.crumbleTimer === 0) {
-              // Generate debris particles
-              for (let j = 0; j < 30; j++) {
-                particles.push({
+              // Generate debris particles with performance-based throttling
+              const currentFPS = frameRate();
+              const lowPerformanceMode = currentFPS < 40;
+              const particleCount = lowPerformanceMode ? 15 : 30;
+              
+              for (let j = 0; j < particleCount; j++) {
+                createParticle({
                   x: p.x + random(p.w),
                   y: p.y + random(p.h),
                   vx: random(-3, 3),
@@ -1473,10 +1519,11 @@
                 });
               }
 
-              // Add a dramatic burst effect
-              for (let j = 0; j < 15; j++) {
+              // Add a dramatic burst effect with performance-based throttling
+              const burstParticleCount = lowPerformanceMode ? 7 : 15;
+              for (let j = 0; j < burstParticleCount; j++) {
                 const angle = random(TWO_PI);
-                particles.push({
+                createParticle({
                   x: p.x + p.w / 2,
                   y: p.y + p.h / 2,
                   vx: cos(angle) * random(1, 5),
