@@ -332,6 +332,10 @@
       // Particle system optimization
       const MAX_PARTICLES = 120; // Maximum particles allowed at once
       const PARTICLE_CULLING_DISTANCE = 1000; // Remove particles far from view
+      
+      // Particle pool for reusing particle objects
+      const particlePool = [];
+      const POOL_SIZE = 200; // Maximum size of the particle pool
 
       // animation constants
       const FRAME_WIDTH = 48,
@@ -447,6 +451,77 @@
         );
       }
 
+      // Function to initialize the particle pool
+      function initParticlePool() {
+        for (let i = 0; i < POOL_SIZE; i++) {
+          particlePool.push({
+            active: false,
+            markedForDeletion: false
+          });
+        }
+      }
+      
+      // Function to get a particle from the pool
+      function getParticleFromPool() {
+        // First check for inactive particles in the pool
+        for (let i = 0; i < particlePool.length; i++) {
+          if (!particlePool[i].active) {
+            return particlePool[i];
+          }
+        }
+        
+        // If no inactive particles, create a new one if we haven't reached pool size
+        if (particlePool.length < POOL_SIZE) {
+          const newParticle = { active: false, markedForDeletion: false };
+          particlePool.push(newParticle);
+          return newParticle;
+        }
+        
+        // If pool is full, return null (no particle available)
+        return null;
+      }
+      
+      // Create a particle with object pooling
+      function createParticle(config) {
+        // Check active particles count for throttling
+        const activeCount = particles.filter(p => p.active).length;
+        
+        // Apply dynamic throttling based on performance
+        if (activeCount >= MAX_PARTICLES) {
+          return null; // Too many active particles
+        }
+        
+        // Get a particle from the pool
+        const particle = getParticleFromPool();
+        if (!particle) return null;
+        
+        // Reset and initialize the particle
+        Object.assign(particle, {
+          x: config.x,
+          y: config.y,
+          vx: config.vx,
+          vy: config.vy,
+          size: config.size,
+          life: config.life,
+          maxLife: config.maxLife || config.life,
+          color: config.color,
+          type: config.type || "default",
+          active: true,
+          markedForDeletion: false,
+          text: config.text,
+          textSize: config.textSize,
+          angle: config.angle || 0,
+          rotationSpeed: config.rotationSpeed || 0
+        });
+        
+        // Add to active particles array if not already there
+        if (!particles.includes(particle)) {
+          particles.push(particle);
+        }
+        
+        return particle;
+      }
+
       function setup() {
         pixelDensity(window.devicePixelRatio || 1);
         let cnv = createCanvas(500, 800).parent("game-container");
@@ -485,6 +560,9 @@
         textAlign(CENTER, CENTER);
         imageMode(CENTER);
         colorMode(RGB, 255);
+
+        // Initialize particle pool
+        initParticlePool();
 
         initializeGame();
         // Position the player lower on the screen (show more ahead)
@@ -1026,22 +1104,43 @@
       }
 
       function updateAndDrawParticles() {
-        // Enforce particle limit before processing
-        if (particles.length > MAX_PARTICLES) {
-          // Remove oldest particles when over limit
-          particles.splice(0, particles.length - MAX_PARTICLES);
-        }
-
-        // Get current performance level
+        // Dynamically adjust MAX_PARTICLES based on performance
         const currentFPS = frameRate();
         const lowPerformanceMode = currentFPS < 40;
+        
+        // Lower particle count in low performance mode
+        const effectiveMaxParticles = lowPerformanceMode ? MAX_PARTICLES / 2 : MAX_PARTICLES;
+        
+        // Count active particles and mark excess ones for deletion
+        const activeParticles = particles.filter(p => p.active && !p.markedForDeletion);
+        if (activeParticles.length > effectiveMaxParticles) {
+          // Mark oldest particles for deletion
+          const sortedParticles = [...activeParticles].sort((a, b) => a.life - b.life);
+          const excessCount = activeParticles.length - effectiveMaxParticles;
+          for (let i = 0; i < excessCount; i++) {
+            if (i < sortedParticles.length) {
+              sortedParticles[i].markedForDeletion = true;
+            }
+          }
+        }
 
         push();
         translate(-cameraX, -cameraY);
         noStroke();
 
+        // Process particles (update and draw)
         for (let i = particles.length - 1; i >= 0; i--) {
           const p = particles[i];
+          
+          // Skip inactive particles
+          if (!p.active) continue;
+          
+          // Handle particles marked for deletion
+          if (p.markedForDeletion) {
+            p.active = false;
+            // Don't splice, just mark inactive and skip processing
+            continue;
+          }
 
           // Cull distant particles that aren't visible
           if (
@@ -1050,7 +1149,7 @@
             p.y < cameraY - PARTICLE_CULLING_DISTANCE ||
             p.y > cameraY + height + PARTICLE_CULLING_DISTANCE
           ) {
-            particles.splice(i, 1);
+            p.active = false;
             continue;
           }
 
@@ -1082,7 +1181,7 @@
           p.life -= 1;
 
           if (p.life <= 0) {
-            particles.splice(i, 1);
+            p.active = false;
             continue;
           }
 
@@ -1125,6 +1224,13 @@
             textAlign(CENTER, CENTER);
           }
         }
+        
+        // Clean up the particles array periodically (every 60 frames)
+        if (frameCount % 60 === 0) {
+          // Remove inactive particles from the array
+          particles = particles.filter(p => p.active);
+        }
+        
         pop();
       }
 
