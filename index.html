@@ -1837,17 +1837,23 @@
 
             // Regular collision check
             if (n.x > p.x && n.x < p.x + p.w && n.y > p.y && n.y < p.h) {
-              // Create satisfying burst particles
-              for (let j = 0; j < 20; j++) {
+              // Create satisfying burst particles with performance-based throttling
+              const currentFPS = frameRate();
+              const lowPerformanceMode = currentFPS < 40;
+              const particleCount = lowPerformanceMode ? 10 : 20;
+              
+              for (let j = 0; j < particleCount; j++) {
                 const ang = random(TWO_PI);
-                particles.push({
+                createParticle({
                   x: n.x,
                   y: n.y,
                   vx: cos(ang) * random(1, 4),
                   vy: sin(ang) * random(1, 4),
                   size: random(3, 8),
                   life: random(15, 30),
+                  maxLife: 30,
                   color: color(random(200, 255), random(100, 200), random(50, 150), 200),
+                  type: "default"
                 });
               }
 
@@ -1866,18 +1872,27 @@
 
             // Near miss feedback for things
             if (!t.collected && distToThing < 20 && distToThing > 0) {
-              // This is a near miss with a thing!
-              for (let j = 0; j < 3; j++) {
-                particles.push({
-                  x: n.x,
-                  y: n.y,
-                  vx: random(-1, 1),
-                  vy: random(-2, -0.5),
-                  size: 3,
-                  life: random(20, 30),
-                  color: color(255, 200, 100, 200),
-                  text: "Almost!",
-                });
+              // This is a near miss with a thing! Apply performance-based throttling
+              const currentFPS = frameRate();
+              const lowPerformanceMode = currentFPS < 40;
+              
+              // In low performance mode, only show text occasionally
+              if (!lowPerformanceMode || random() < 0.5) {
+                const particleCount = lowPerformanceMode ? 1 : 3;
+                for (let j = 0; j < particleCount; j++) {
+                  createParticle({
+                    x: n.x,
+                    y: n.y,
+                    vx: random(-1, 1),
+                    vy: random(-2, -0.5),
+                    size: 3,
+                    life: random(20, 30),
+                    maxLife: 30,
+                    color: color(255, 200, 100, 200),
+                    text: "Almost!",
+                    type: "text"
+                  });
+                }
               }
             }
 
@@ -1889,18 +1904,24 @@
               n.y > t.y - t.size / 2 &&
               n.y < t.y + t.size / 2
             ) {
-              // Create colorful burst on collection
-              for (let j = 0; j < 25; j++) {
+              // Create colorful burst on collection with performance-based throttling
+              const currentFPS = frameRate();
+              const lowPerformanceMode = currentFPS < 40;
+              const particleCount = lowPerformanceMode ? 12 : 25;
+              
+              for (let j = 0; j < particleCount; j++) {
                 const ang = random(TWO_PI);
                 const particleDist = random(5, 15);
-                particles.push({
+                createParticle({
                   x: t.x + cos(ang) * particleDist,
                   y: t.y + sin(ang) * particleDist,
                   vx: cos(ang) * random(1, 5),
                   vy: sin(ang) * random(-5, 1),
                   size: random(5, 10),
                   life: random(20, 40),
+                  maxLife: 40,
                   color: color(random(100, 255), random(100, 255), random(100, 255)),
+                  type: "sparkle"
                 });
               }
 
@@ -2211,9 +2232,13 @@
                   if (p.crumbleTimer === -1) {
                     p.crumbleTimer = p.crumbleMax;
 
-                    // Create crumbling particles...
-                    for (let i = 0; i < 5; i++) {
-                      particles.push({
+                    // Create crumbling particles with performance-based throttling
+                    const currentFPS = frameRate();
+                    const lowPerformanceMode = currentFPS < 40;
+                    const particleCount = lowPerformanceMode ? 3 : 5;
+                    
+                    for (let i = 0; i < particleCount; i++) {
+                      createParticle({
                         x: player.x + random(-10, 10),
                         y: p.y,
                         vx: random(-1, 1),
@@ -2229,19 +2254,21 @@
                     }
 
                     // Add "Cracking!" text effect
-                    particles.push({
-                      x: player.x,
-                      y: player.y - 25,
-                      vx: 0,
-                      vy: -1,
-                      color: color(255, 100, 50),
-                      size: 2,
-                      life: 30,
-                      maxLife: 30,
-                      type: "text",
-                      text: "Cracking!",
-                      textSize: 12,
-                    });
+                    if (!lowPerformanceMode || random() < 0.7) { // Occasionally skip in low perf mode
+                      createParticle({
+                        x: player.x,
+                        y: player.y - 25,
+                        vx: 0,
+                        vy: -1,
+                        color: color(255, 100, 50),
+                        size: 2,
+                        life: 30,
+                        maxLife: 30,
+                        type: "text",
+                        text: "Cracking!",
+                        textSize: 12,
+                      });
+                    }
                   }
                   break;
 
@@ -2289,10 +2316,14 @@
                     }
                   }
 
-                  // Add bounce particles
-                  for (let i = 0; i < 12; i++) {
+                  // Add bounce particles with performance-based throttling
+                  const currentFPS = frameRate();
+                  const lowPerformanceMode = currentFPS < 40;
+                  const particleCount = lowPerformanceMode ? 6 : 12;
+                  
+                  for (let i = 0; i < particleCount; i++) {
                     const angle = random(-PI / 4, (-3 * PI) / 4);
-                    particles.push({
+                    createParticle({
                       x: player.x + random(-10, 10),
                       y: player.y + player.height / 2 - 5,
                       vx: cos(angle) * random(1, 3),
@@ -2306,16 +2337,18 @@
                   }
 
                   // Add bounce text effect - bigger and more noticeable
-                  particles.push({
-                    x: player.x,
-                    y: player.y - 25,
-                    vx: 0,
-                    vy: -2,
-                    color: color(255, 220, 0),
-                    size: 2,
-                    life: 40,
-                    maxLife: 40,
-                    type: "text",
+                  // Skip sometimes in low performance mode
+                  if (!lowPerformanceMode || random() < 0.7) {
+                    createParticle({
+                      x: player.x,
+                      y: player.y - 25,
+                      vx: 0,
+                      vy: -2,
+                      color: color(255, 220, 0),
+                      size: 2,
+                      life: 40,
+                      maxLife: 40,
+                      type: "text",
                     text: "BOING!",
                     textSize: 16,
                   });
