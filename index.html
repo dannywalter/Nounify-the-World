@@ -1407,7 +1407,7 @@
               // Create different particle effects based on difficulty level
               if (p.zoneDifficulty > 0.8) {
                 // Advanced zone: Intense particles
-                particles.push({
+                createParticle({
                   x: p.x + random(p.w),
                   y: p.y + random(-3, 0),
                   vx: random(-0.5, 0.5),
@@ -1420,7 +1420,7 @@
                 });
               } else if (p.zoneDifficulty > 0.6) {
                 // Mid-game: Medium particles
-                particles.push({
+                createParticle({
                   x: p.x + random(p.w),
                   y: p.y + random(p.h),
                   vx: random(-0.3, 0.3),
@@ -1433,7 +1433,7 @@
                 });
               } else {
                 // Early zones: Subtle particles
-                particles.push({
+                createParticle({
                   x: p.x + random(p.w),
                   y: p.y + p.h - 2,
                   vx: random(-0.2, 0.2),
@@ -1801,6 +1801,10 @@
       }
 
       function updateNoggles() {
+        // Get current performance level for throttling
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 40;
+        
         for (let i = noggles.length - 1; i >= 0; i--) {
           const n = noggles[i];
           n.vy += NOGGLE_GRAVITY;
@@ -1813,17 +1817,20 @@
             const distToPlat = distToRectangle(n.x, n.y, p.x, p.y, p.w, p.h);
 
             if (distToPlat < 15 && distToPlat > 0) {
-              // This is a near miss! Create "so close" particles
-              for (let j = 0; j < 5; j++) {
-                particles.push({
+              // This is a near miss! Create "so close" particles with throttling
+              const particleCount = lowPerformanceMode ? 2 : 5;
+              for (let j = 0; j < particleCount; j++) {
+                createParticle({
                   x: n.x,
                   y: n.y,
                   vx: random(-1, 1),
                   vy: random(-2, -0.5),
                   size: 3,
                   life: random(20, 30),
+                  maxLife: 30,
                   color: color(255, 255, 100, 200),
                   text: "Close!",
+                  type: "text"
                 });
               }
             }
@@ -1992,10 +1999,17 @@
 
           // Enhanced jump particles for better visual feedback (since we're removing the squash)
           // Create a dust cloud effect at player's feet
-          for (let i = 0; i < 15; i++) {
+          // Throttle particle creation for jumps in low performance mode
+          const currentFPS = frameRate();
+          const lowPerformanceMode = currentFPS < 40;
+          
+          // Adjust particle count based on performance
+          const particleCount = lowPerformanceMode ? 8 : 15;
+          
+          for (let i = 0; i < particleCount; i++) {
             const angle = random(PI / 6, (5 * PI) / 6);
             const speed = random(1, 4);
-            particles.push({
+            createParticle({
               x: player.x + random(-10, 10),
               y: player.y + player.height / 2,
               vx: cos(angle) * speed * (random() > 0.5 ? -1 : 1),
@@ -2008,9 +2022,9 @@
             });
           }
 
-          // Add text effect occasionally
-          if (random() < 0.3) {
-            particles.push({
+          // Add text effect occasionally, but less often in low performance mode
+          if (random() < (lowPerformanceMode ? 0.15 : 0.3)) {
+            createParticle({
               x: player.x,
               y: player.y - 20,
               vx: 0,
@@ -2981,18 +2995,24 @@
         // Add throw animation to player with more dramatic effect
         player.throwSquash = 1.5; // Increased for more visual impact
 
-        // Create throw particles
-        for (let i = 0; i < 12; i++) {
+        // Create throw particles - adjust count based on performance
+        const currentFPS = frameRate();
+        const lowPerformanceMode = currentFPS < 40;
+        const particleCount = lowPerformanceMode ? 6 : 12;
+        
+        for (let i = 0; i < particleCount; i++) {
           const particleAngle = angle + random(-0.5, 0.5);
           const particleSpeed = random(1, 5);
-          particles.push({
+          createParticle({
             x: wsx,
             y: wsy,
             vx: cos(particleAngle) * particleSpeed,
             vy: sin(particleAngle) * particleSpeed,
             size: random(2, 6),
             life: random(10, 25),
+            maxLife: 25,
             color: noggleColor,
+            type: "default"
           });
         }
 
