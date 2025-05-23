@@ -1078,11 +1078,7 @@
           }
         }
 
-        // Always show timer at the top
-        textAlign(CENTER, TOP);
-        textSize(20);
-        fill(255);
-        text(`Tag Timer: ${floor(tagTimer / 60)}`, width / 2, 40);
+        // Tag timer display has been removed for a cleaner UI
       }
 
       // Function to draw desaturation effect for countdown
@@ -2260,23 +2256,8 @@
         textAlign(CENTER, TOP);
         text(`Score: ${score}`, width / 2, 10);
 
-        // Draw level section indicator with updated naming to match more varied level
-        // Calculate the exact progress through the level
-        const levelProgress = player.x / LEVEL_LENGTH;
-        const levelSection = floor(levelProgress * 5);
-        const sectionName = [
-          "Starting Area",
-          "Bouncy Challenges",
-          "Mixed Movement",
-          "Tricky Terrain",
-          "Master Challenge",
-        ][Math.min(levelSection, 4)];        textSize(16);
-        textAlign(CENTER, TOP);
-        fill(255, 255, 220);
-        text(sectionName, width / 2, 25);
+        // Section name and platform indicators have been removed for a cleaner UI
         
-        // Progress bar and platform type indicators have been removed for a cleaner UI
-
         // Reset text alignment
         textAlign(CENTER, CENTER);
       }
