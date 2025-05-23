@@ -413,8 +413,9 @@
             return;
           }
         
-        // Create a p5 Graphics buffer for our sprite sheet
-        const spriteSheetBuffer = createGraphics(8 * FRAME_WIDTH, 8 * FRAME_HEIGHT);
+        // Create a p5 Graphics buffer for our sprite sheet with proper dimensions
+        // Full sprite sheet size is 16 columns x 8 rows of 48px frames
+        const spriteSheetBuffer = createGraphics(16 * FRAME_WIDTH, 8 * FRAME_HEIGHT);
         console.log("Created sprite sheet buffer:", spriteSheetBuffer.width, "x", spriteSheetBuffer.height);
         
         // Set transparent background for the sprite sheet
@@ -425,23 +426,48 @@
         const categories = ['body', 'belowthebelt', 'shoes', 'head', 'accessory', 'glasses'];
         const drawOrder = ['body', 'belowthebelt', 'shoes', 'head', 'accessory', 'glasses']; // Order from back to front
         
-        // Function to draw a single composite frame at a specific position
-        const drawCompositeFrame = (col, row, flipped) => {
-          const x = col * FRAME_WIDTH;
-          const y = row * FRAME_HEIGHT;
+        // Function to compose a single frame by drawing all parts at a specific position
+        // This function takes the following parameters:
+        // - targetCol: column in our output sprite sheet (0-15)
+        // - targetRow: row in our output sprite sheet (0-7)
+        // - sourceCol: column in the source sprite sheet (0-15)
+        // - sourceRow: row in the source sprite sheet (0-7)
+        // - flipped: whether to flip the image horizontally
+        const composeFrame = (targetCol, targetRow, sourceCol, sourceRow, flipped) => {
+          const targetX = targetCol * FRAME_WIDTH;
+          const targetY = targetRow * FRAME_HEIGHT;
+          const sourceX = sourceCol * FRAME_WIDTH;
+          const sourceY = sourceRow * FRAME_HEIGHT;
           
-          // Draw each part in order (back to front)
+          // Draw each part in the specified order (back to front)
           for (const part of drawOrder) {
             if (partImages[part]) {
               spriteSheetBuffer.push();
+              
               if (flipped) {
                 // Apply horizontal flip for left-facing sprites
-                spriteSheetBuffer.translate(x + FRAME_WIDTH, y);
+                spriteSheetBuffer.translate(targetX + FRAME_WIDTH, targetY);
                 spriteSheetBuffer.scale(-1, 1);
-                spriteSheetBuffer.image(partImages[part], 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+                
+                // Draw the specific frame from the source sprite sheet
+                spriteSheetBuffer.image(
+                  partImages[part],           // Source image
+                  0, 0,                       // Destination position (adjusted for flipping)
+                  FRAME_WIDTH, FRAME_HEIGHT,  // Destination size
+                  sourceX, sourceY,           // Source position in the sprite sheet
+                  FRAME_WIDTH, FRAME_HEIGHT   // Source size
+                );
               } else {
-                spriteSheetBuffer.image(partImages[part], x, y, FRAME_WIDTH, FRAME_HEIGHT);
+                // Draw the specific frame from the source sprite sheet without flipping
+                spriteSheetBuffer.image(
+                  partImages[part],           // Source image
+                  targetX, targetY,           // Destination position
+                  FRAME_WIDTH, FRAME_HEIGHT,  // Destination size
+                  sourceX, sourceY,           // Source position in the sprite sheet
+                  FRAME_WIDTH, FRAME_HEIGHT   // Source size
+                );
               }
+              
               spriteSheetBuffer.pop();
             }
           }
@@ -472,44 +498,84 @@
           // First clear the entire buffer
           spriteSheetBuffer.clear();
           
-          // First row: walk right (8 frames)
+          // Walk right animation (row 0)
           for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 0, false);
+            composeFrame(col, 0, col, 0, false);
           }
           
-          // Second row: walk right continued (consistency with original sheet)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 1, false);
+          // Fill the rest of row 0 with the last walk frame
+          for (let col = 8; col < 16; col++) {
+            composeFrame(col, 0, 7, 0, false);
           }
           
-          // Third row: walk left (8 frames)
+          // Walk up animation (row 1)
           for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 2, true);
+            composeFrame(col, 1, col, 1, false);
           }
           
-          // Fourth row: walk left continued
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 3, true);
+          // Fill the rest of row 1
+          for (let col = 8; col < 16; col++) {
+            composeFrame(col, 1, 7, 1, false);
           }
           
-          // Fifth row: idle right (8 frames)
+          // Walk left animation (row 2) - flipped version of walk right
           for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 4, false);
+            composeFrame(col, 2, col, 0, true);
           }
           
-          // Sixth row: idle right continued (8 more frames for idle)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 5, false);
+          // Fill the rest of row 2
+          for (let col = 8; col < 16; col++) {
+            composeFrame(col, 2, 7, 0, true);
           }
           
-          // Seventh row: idle left (8 frames)
+          // Walk down animation (row 3)
           for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 6, true);
+            composeFrame(col, 3, col, 3, false);
           }
           
-          // Eighth row: idle left continued (8 more frames)
+          // Fill the rest of row 3
+          for (let col = 8; col < 16; col++) {
+            composeFrame(col, 3, 7, 3, false);
+          }
+          
+          // Idle right animation (row 4)
           for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 7, true);
+            composeFrame(col, 4, col, 4, false);
+          }
+          
+          // Fill the rest of row 4
+          for (let col = 8; col < 16; col++) {
+            composeFrame(col, 4, 7, 4, false);
+          }
+          
+          // Idle up animation (row 5)
+          for (let col = 0; col < 8; col++) {
+            composeFrame(col, 5, col, 5, false);
+          }
+          
+          // Fill the rest of row 5
+          for (let col = 8; col < 16; col++) {
+            composeFrame(col, 5, 7, 5, false);
+          }
+          
+          // Idle left animation (row 6) - flipped version of idle right
+          for (let col = 0; col < 8; col++) {
+            composeFrame(col, 6, col, 4, true);
+          }
+          
+          // Fill the rest of row 6
+          for (let col = 8; col < 16; col++) {
+            composeFrame(col, 6, 7, 4, true);
+          }
+          
+          // Idle down animation (row 7)
+          for (let col = 0; col < 8; col++) {
+            composeFrame(col, 7, col, 7, false);
+          }
+          
+          // Fill the rest of row 7
+          for (let col = 8; col < 16; col++) {
+            composeFrame(col, 7, 7, 7, false);
           }
           
           // Create an image from the graphics buffer
@@ -553,9 +619,11 @@
             
             console.log("Loading sprite part:", imgPath);
             loadImage(imgPath, img => {
+              // Store the full sprite sheet image for this part
               partImages[category] = img;
               loadedCount++;
-              console.log(`Loaded ${category} sprite (${loadedCount}/${totalPartsToLoad})`);
+              console.log(`Loaded ${category} sprite sheet (${loadedCount}/${totalPartsToLoad})`);
+              console.log(`Sprite sheet dimensions: ${img.width} x ${img.height}`);
               
               // When all parts are loaded, build the sprite sheet
               if (loadedCount === totalPartsToLoad) {

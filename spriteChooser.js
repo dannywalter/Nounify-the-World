@@ -11,7 +11,23 @@ class SpriteChooser {
     
     this.baseUrl = "https://dannywalter.github.io/Nounify-the-World/assetz/";
     this.spriteImages = {};
-    this.walkAnimation = { frames: 8, speed: 6, currentFrame: 0, tick: 0 };
+    
+    // Animation properties
+    this.walkAnimation = { 
+      frames: 8,           // 8 frames for walk right animation
+      speed: 6,            // Update every 6 frames (10fps at 60fps base)
+      currentFrame: 0,     // Current frame index (0-7)
+      tick: 0              // Animation timer counter
+    };
+    
+    // Sprite sheet properties
+    this.spriteSheetWidth = 768;   // Full sprite sheet width (16 columns of 48px)
+    this.spriteSheetHeight = 384;  // Full sprite sheet height (8 rows of 48px)
+    this.frameWidth = 48;          // Individual frame width
+    this.frameHeight = 48;         // Individual frame height
+    this.framesPerRow = 16;        // Number of frames per row in the sprite sheet
+    this.frameRows = 8;            // Number of rows in the sprite sheet
+    
     this.isLoaded = false;
     this.isVisible = false;
     
@@ -19,31 +35,51 @@ class SpriteChooser {
     this.placeholderImage = this.createPlaceholderImage();
   }
   
-  // Create a simple placeholder image when assets can't be loaded
+  // Create a placeholder sprite sheet for missing assets
   createPlaceholderImage() {
-    // Create an off-screen canvas to generate a placeholder
+    // Create an off-screen canvas to generate a placeholder sprite sheet
     const canvas = document.createElement('canvas');
-    canvas.width = 48; // Single 48x48 frame
-    canvas.height = 48;
+    canvas.width = this.spriteSheetWidth;  // Full sprite sheet width
+    canvas.height = this.spriteSheetHeight; // Full sprite sheet height
     
     const ctx = canvas.getContext('2d');
     
-    // Draw a colorful gradient background
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
-    gradient.addColorStop(0, 'rgba(255, 100, 100, 0.5)');
-    gradient.addColorStop(0.33, 'rgba(100, 255, 100, 0.5)');
-    gradient.addColorStop(0.66, 'rgba(100, 100, 255, 0.5)');
-    gradient.addColorStop(1, 'rgba(255, 100, 255, 0.5)');
-    
-    ctx.fillStyle = gradient;
+    // Fill with light gray background
+    ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw question mark in the center
+    // Draw grid lines to show frame boundaries
+    ctx.strokeStyle = 'rgba(150, 150, 150, 0.5)';
+    ctx.lineWidth = 1;
+    
+    // Draw vertical grid lines
+    for (let x = 0; x <= canvas.width; x += this.frameWidth) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    
+    // Draw horizontal grid lines
+    for (let y = 0; y <= canvas.height; y += this.frameHeight) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+    
+    // Draw question marks in the first row (walk right animation frames)
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.font = 'bold 30px Arial';
+    ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('?', 24, 24);
+    
+    // Add question marks to the first 8 frames (walk right animation)
+    for (let i = 0; i < 8; i++) {
+      const frameX = i * this.frameWidth;
+      const frameY = 0; // First row
+      ctx.fillText('?', frameX + this.frameWidth/2, frameY + this.frameHeight/2);
+    }
     
     // Convert canvas to an Image object
     const img = new Image();
@@ -88,12 +124,12 @@ class SpriteChooser {
   prepareCharacterAnimations() {
     console.log("Preparing character animations");
     
-    // Set up animation parameters for simple walking effect
+    // Set up animation parameters for the walking animation
     this.walkAnimation = { 
-      frames: 8,           // 8 animation steps for smooth movement
+      frames: 8,           // 8 frames for walk right animation
       speed: 6,            // Update every 6 frames (10fps at 60fps base)
-      currentFrame: 0,     // Current animation step
-      tick: 0              // Animation timer
+      currentFrame: 0,     // Current frame index (0-7)
+      tick: 0              // Animation timer counter
     };
   }
   
@@ -258,15 +294,11 @@ class SpriteChooser {
   }
   
   drawCharacterPreview(ctx, x, y, scale) {
-    // Calculate frame offset for walking animation
-    const frameOffset = this.walkAnimation.currentFrame;
+    // Get the current frame index for the walking animation
+    const frameIndex = this.walkAnimation.currentFrame;
     
     // Draw each part of the character from back to front
     const drawOrder = ['body', 'belowthebelt', 'shoes', 'head', 'accessory', 'glasses'];
-    
-    // Frame constants - individual sprites are 48x48 pixels
-    const frameWidth = 48;  // Each sprite is 48x48 pixels
-    const frameHeight = 48;
     
     ctx.save();
     ctx.translate(x, y);
@@ -296,15 +328,18 @@ class SpriteChooser {
             // Create bobbing animation effect for character preview
             let offsetY = Math.sin(Date.now() * 0.003) * 3; // Gentle bobbing effect
             
-            // Add horizontal walking animation by shifting position slightly
-            let offsetX = Math.sin(frameOffset * 0.8) * 2; // Gentle side-to-side movement
+            // Calculate source coordinates for the current frame (first row, first 8 frames)
+            // Looking at the walk right animation frames (top row, first 8 frames)
+            const sourceX = frameIndex * this.frameWidth; // X position in sprite sheet
+            const sourceY = 0;                            // Y position (first row)
             
-            // Individual sprites are single 48x48 images, not sprite sheets
-            // Draw the entire image scaled appropriately with animation offset
+            // Draw the current frame centered and scaled appropriately
             ctx.drawImage(
               imgToDraw,
-              -frameWidth*scale/2 + offsetX, -frameHeight*scale/2 + offsetY, // Destination X, Y with animation offset
-              frameWidth*scale, frameHeight*scale // Destination width/height
+              sourceX, sourceY,                      // Source X, Y - extract frame from sprite sheet
+              this.frameWidth, this.frameHeight,     // Source width/height - one frame
+              -this.frameWidth*scale/2, -this.frameHeight*scale/2 + offsetY,  // Destination X, Y with animation offset
+              this.frameWidth*scale, this.frameHeight*scale  // Destination width/height
             );
           } catch (imgErr) {
             console.error(`Error drawing image for ${imgKey}:`, imgErr);
