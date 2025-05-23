@@ -262,6 +262,10 @@
         platforms.length = 0;
         clouds.length = 0;
 
+        // Reset particles for performance improvement
+        particles = [];
+        particles.push = function() { return particles.length; };
+
         score = 0;
         coyoteTimer = 0;
         jumpBufferTimer = 0;
@@ -361,6 +365,8 @@
         things = [],
         score = 0;
       let particles = [];
+      // Override the push method to do nothing, preventing particle creation for performance
+      particles.push = function() { return particles.length; };
       let platforms = [],
         goal,
         levelWidth,
@@ -509,6 +515,9 @@
         activeBrightPalette = brightPalettes[brightKeys[floor(random(brightKeys.length))]];
 
         noggles = [];
+        // Reset the particles array and restore its push method for performance improvement
+        particles = [];
+        particles.push = function() { return particles.length; };
         score = 0;
         coyoteTimer = 0;
         jumpBufferTimer = 0;
@@ -1026,106 +1035,9 @@
       }
 
       function updateAndDrawParticles() {
-        // Enforce particle limit before processing
-        if (particles.length > MAX_PARTICLES) {
-          // Remove oldest particles when over limit
-          particles.splice(0, particles.length - MAX_PARTICLES);
-        }
-
-        // Get current performance level
-        const currentFPS = frameRate();
-        const lowPerformanceMode = currentFPS < 40;
-
-        push();
-        translate(-cameraX, -cameraY);
-        noStroke();
-
-        for (let i = particles.length - 1; i >= 0; i--) {
-          const p = particles[i];
-
-          // Cull distant particles that aren't visible
-          if (
-            p.x < cameraX - PARTICLE_CULLING_DISTANCE ||
-            p.x > cameraX + width + PARTICLE_CULLING_DISTANCE ||
-            p.y < cameraY - PARTICLE_CULLING_DISTANCE ||
-            p.y > cameraY + height + PARTICLE_CULLING_DISTANCE
-          ) {
-            particles.splice(i, 1);
-            continue;
-          }
-
-          // Update particle position
-          p.x += p.vx;
-          p.y += p.vy;
-
-          // Apply physics and behaviors based on particle type
-          if (p.type === "debris") {
-            // Debris particles bounce slightly
-            if (p.y > height && p.vy > 0) {
-              p.vy = -p.vy * 0.4;
-              p.vx *= 0.8;
-            }
-            p.vy += 0.4; // Stronger gravity for debris
-            p.angle = (p.angle || 0) + p.rotationSpeed;
-          } else if (p.type === "sparkle") {
-            // Sparkles float and fade
-            p.size *= 0.95;
-            p.vy *= 0.95; // Slow down vertical movement
-          } else if (p.type === "text") {
-            // Text particles fade and float upward
-            p.vy *= 0.95;
-          } else {
-            // Default particle behavior
-            p.vy += 0.2; // Standard gravity
-          }
-
-          p.life -= 1;
-
-          if (p.life <= 0) {
-            particles.splice(i, 1);
-            continue;
-          }
-
-          // Calculate opacity based on lifespan
-          const maxLife = p.maxLife || 20;
-          const alpha = map(p.life, 0, maxLife, 0, 255);
-
-          // Draw different particle types
-          if (p.type === "debris") {
-            // Draw rectangular debris
-            push();
-            fill(red(p.color), green(p.color), blue(p.color), alpha);
-            translate(p.x, p.y);
-            rotate(p.angle || 0);
-            rect(0, 0, p.size, p.size);
-            pop();
-          } else if (p.type === "sparkle") {
-            // Reduce expensive shadow effects in low performance mode
-            if (!lowPerformanceMode) {
-              drawingContext.shadowBlur = p.size;
-              drawingContext.shadowColor = color(255, 255, 200, alpha);
-            }
-            fill(255, 255, 200, alpha);
-            circle(p.x, p.y, p.size);
-            if (!lowPerformanceMode) {
-              drawingContext.shadowBlur = 0;
-            }
-          } else {
-            // Draw standard circular particle
-            fill(red(p.color), green(p.color), blue(p.color), alpha);
-            circle(p.x, p.y, p.size);
-          }
-
-          // Draw text if particle has text property and not in low performance mode
-          if (p.text && (!lowPerformanceMode || p.type === "text")) {
-            fill(255, alpha);
-            textAlign(CENTER, CENTER);
-            textSize(p.textSize || 10);
-            text(p.text, p.x, p.y - (p.size + 5));
-            textAlign(CENTER, CENTER);
-          }
-        }
-        pop();
+        // Performance improvement: All particles and effects have been removed
+        // Function now returns immediately without doing any work
+        return;
       }
 
       function drawGameScene() {
