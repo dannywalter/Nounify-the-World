@@ -4,7 +4,9 @@ class SpriteChooser {
       'head': { count: 0, current: 0 },
       'glasses': { count: 0, current: 0 },
       'body': { count: 0, current: 0 },
-      'accessory': { count: 0, current: 0 }
+      'accessory': { count: 0, current: 0 },
+      'belowthebelt': { count: 0, current: 0 },
+      'shoes': { count: 0, current: 0 }
     };
     
     this.baseUrl = "https://dannywalter.github.io/Nounify-the-World/assetz/";
@@ -323,7 +325,7 @@ class SpriteChooser {
     const frameOffset = this.walkAnimation.currentFrame;
     
     // Draw each part of the character from back to front
-    const drawOrder = ['body', 'head', 'accessory', 'glasses'];
+    const drawOrder = ['body', 'belowthebelt', 'shoes', 'head', 'accessory', 'glasses'];
     
     // Frame constants - for a 16x8 sprite sheet
     const frameWidth = 48;  // Each frame is 48x48 pixels
