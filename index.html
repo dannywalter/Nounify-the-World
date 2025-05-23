@@ -9,8 +9,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <!-- Farcade SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@farcade/game-sdk@latest/dist/index.min.js"></script>
-    <!-- Sprite Chooser -->
-    <script src="spriteChooser.js"></script>
     <!-- Keyboard Input Tracker (Inline) -->
     <script>
       // KeyTracker - A simple module to track key states regardless of canvas focus
@@ -196,53 +194,6 @@
       // ── STATE‑WATCHER SETUP ──
       let _prevState = "";
 
-      // Game objects and arrays
-      let clouds = [];
-      let platforms = [];
-      let things = [];
-      let noggles = [];
-      let particles = [];
-      let player = {
-        x: 0, 
-        y: 0, 
-        width: 48, 
-        height: 48, 
-        velocityX: 0, 
-        velocityY: 0, 
-        isOnGround: false,
-        spriteSheet: null,
-        animation: { currentSet: "idle", facingDirection: 1, frameIndex: 0, tick: 0 }
-      }; // Initialize with safe default values
-      let goal = { x: 0, y: 0, w: 50, h: 50, color: '#FFFFFF' }; // Initialize with default values
-      let cloudImg;
-      let nounSpriteSheet;
-      let customCharacterSpriteSheet;
-      let thingSpriteSheet;
-      let thingSpriteSheetGrey;
-      let tutorialShown = { bouncy: false, moving: false, crumbling: false };
-      let cameraX = 0;
-      let cameraY = 0;
-      let initialCameraY = 0;
-      let levelWidth = 0;
-      let score = 0;
-      let tagTimer = 0;
-      let coyoteTimer = 0;
-      let jumpBufferTimer = 0;
-      let frameRateUpdateTimer = 0;
-      let frameRateHistory = [];
-      let debugMode = false;
-      let activeDullPalette;
-      let activeBrightPalette;
-      let previousJumpState = false;
-      
-      // Game UI controls
-      let jumpBtn = { x: 0, y: 0, r: 40 };
-      let joystick = { x: 0, y: 0, inner: 20, outer: 80, activeRadius: 120 };
-
-      // Sprite Chooser
-      let spriteChooser;
-      let playerSpriteConfig;
-      
       // Debounce for throw mechanic
       let lastThrowTime = 0;
       const THROW_COOLDOWN = 300; // milliseconds between throws
@@ -401,232 +352,160 @@
         fall: { right: { row: 0, startFrame: 8 }, left: { row: 2, startFrame: 8 } },
       };
 
-      // --- GAME STATES AND LEVELS ---
-      
-      // Creates a custom sprite sheet by compositing the player's chosen parts
-      function createCustomSpriteSheet() {
-        console.log("Creating custom sprite sheet with config:", playerSpriteConfig);
-        
-        try {
-          if (!playerSpriteConfig) {
-            console.warn("No sprite configuration found!");
-            return;
-          }
-        
-        // Create a p5 Graphics buffer for our sprite sheet
-        const spriteSheetBuffer = createGraphics(8 * FRAME_WIDTH, 8 * FRAME_HEIGHT);
-        console.log("Created sprite sheet buffer:", spriteSheetBuffer.width, "x", spriteSheetBuffer.height);
-        
-        // Set transparent background for the sprite sheet
-        spriteSheetBuffer.clear();
-        
-        // Get image objects for each selected part
-        const partImages = {};
-        const categories = ['body', 'head', 'accessory', 'glasses'];
-        const drawOrder = ['body', 'head', 'accessory', 'glasses']; // Order from back to front
-        
-        // Function to draw a single composite frame at a specific position
-        const drawCompositeFrame = (col, row, flipped) => {
-          const x = col * FRAME_WIDTH;
-          const y = row * FRAME_HEIGHT;
-          
-          // Draw each part in order (back to front)
-          for (const part of drawOrder) {
-            if (partImages[part]) {
-              spriteSheetBuffer.push();
-              if (flipped) {
-                // Apply horizontal flip for left-facing sprites
-                spriteSheetBuffer.translate(x + FRAME_WIDTH, y);
-                spriteSheetBuffer.scale(-1, 1);
-                spriteSheetBuffer.image(partImages[part], 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-              } else {
-                spriteSheetBuffer.image(partImages[part], x, y, FRAME_WIDTH, FRAME_HEIGHT);
-              }
-              spriteSheetBuffer.pop();
-            }
-          }
-        };
-        
-        // Load all part images asynchronously
-        let loadedCount = 0;
-        let totalPartsToLoad = 0;
-        
-        // Count how many parts we need to load
-        for (const category of categories) {
-          if (playerSpriteConfig && category in playerSpriteConfig) {
-            totalPartsToLoad++;
+      // — STATE —
+      let cloudImg,
+        clouds = [];
+      let joystick = { x: 0, y: 0, outer: 60, inner: 30, activeRadius: 150 };
+      let jumpBtn = { x: 0, y: 0, r: 80 };
+      let cameraX = 0,
+        cameraY = 0,
+        initialCameraY = 0;
+      let noggles = [],
+        things = [],
+        score = 0;
+      let particles = [];
+      // Override the push method to do nothing, preventing particle creation for performance
+      particles.push = function() { return particles.length; };
+      let platforms = [],
+        goal,
+        levelWidth,
+        gameState;
+      let player, nounSpriteSheet, noggleImg, thingSpriteSheet, thingSpriteSheetGrey;
+      let coyoteTimer = 0,
+        jumpBufferTimer = 0,
+        tagTimer = TAG_TIMER_MAX,
+        previousJumpState = false; // Track jump button state for edge detection
+
+      // Debug mode variables
+      let debugMode = false;
+      let frameRateHistory = [];
+      let frameRateUpdateTimer = 0;
+
+      // Help system for platform types
+      let helpTexts = {
+        crumbling: { shown: false, text: "NEW! Crumbling platforms fall after you step on them!" },
+        moving: { shown: false, text: "NEW! These blue platforms move left and right!" },
+        bouncy: { shown: false, text: "NEW! Yellow platforms give you an extra boost!" },
+      };
+
+      // Track if each platform type has had a tutorial platform
+      let tutorialShown = {
+        crumbling: false,
+        moving: false,
+        bouncy: false,
+      };
+
+      let titleBg;
+      // Track loading progress
+      let loadingProgress = 0;
+      let totalAssets = 6; // Total number of assets to load (including greyscale sprite sheet)
+      let assetsLoaded = 0;
+
+      // Function to update the loading progress UI
+      function updateLoadingProgress(increment = 1) {
+        assetsLoaded += increment;
+        loadingProgress = (assetsLoaded / totalAssets) * 100;
+
+        // Update the loading bar
+        const progressBar = document.getElementById("loading-progress-bar");
+        const loadingText = document.getElementById("loading-text");
+
+        if (progressBar) {
+          progressBar.style.width = loadingProgress + "%";
+        }
+
+        if (loadingText) {
+          if (loadingProgress < 100) {
+            loadingText.textContent = `Loading game assets... ${Math.floor(loadingProgress)}%`;
+          } else {
+            loadingText.textContent = "Ready to play!";
           }
         }
-        
-        // If there are no parts to load, use default sprite sheet
-        if (totalPartsToLoad === 0) {
-          console.log("No custom parts selected, using default sprite sheet");
-          return;
-        }
-        
-        // Function to create sprite sheet once all images are loaded
-        const buildSpriteSheet = () => {
-          // Build the sprite sheet by placing composite frames in the right positions
-          console.log("Building sprite sheet with parts:", Object.keys(partImages));
-          
-          // First clear the entire buffer
-          spriteSheetBuffer.clear();
-          
-          // First row: walk right (8 frames)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 0, false);
-          }
-          
-          // Second row: walk right continued (consistency with original sheet)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 1, false);
-          }
-          
-          // Third row: walk left (8 frames)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 2, true);
-          }
-          
-          // Fourth row: walk left continued
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 3, true);
-          }
-          
-          // Fifth row: idle right (8 frames)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 4, false);
-          }
-          
-          // Sixth row: idle right continued (8 more frames for idle)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 5, false);
-          }
-          
-          // Seventh row: idle left (8 frames)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 6, true);
-          }
-          
-          // Eighth row: idle left continued (8 more frames)
-          for (let col = 0; col < 8; col++) {
-            drawCompositeFrame(col, 7, true);
-          }
-          
-          // Create an image from the graphics buffer
-          customCharacterSpriteSheet = spriteSheetBuffer;
-          
-          // Update player's sprite sheet
-          player.spriteSheet = customCharacterSpriteSheet;
-          
-          console.log("Custom sprite sheet created successfully");
-        };
-        
-        for (const category of categories) {
-          if (playerSpriteConfig && category in playerSpriteConfig) {
-            const partIndex = playerSpriteConfig[category];
-            
-            // Validate the part index
-            if (typeof partIndex !== 'number' || isNaN(partIndex)) {
-              console.warn(`Invalid part index for ${category}: ${partIndex}`);
-              loadedCount++;
-              
-              // Try to build sprite sheet even if some indices are invalid
-              if (loadedCount === totalPartsToLoad) {
-                buildSpriteSheet();
-              }
-              continue;
-            }
-            
-            // Try to load the asset using the appropriate filename format
-            // First check if we have access to spriteChooser's mapping
-            let imgPath;
-            if (spriteChooser && spriteChooser.categoryMappings && 
-                spriteChooser.categoryMappings[category] && 
-                spriteChooser.categoryMappings[category][partIndex]) {
-              // Use the mapped filename
-              const filename = spriteChooser.categoryMappings[category][partIndex];
-              imgPath = `https://dannywalter.github.io/Nounify-the-World/assetz/${category}/${filename}`;
-            } else {
-              // Fallback to indexed format
-              imgPath = `https://dannywalter.github.io/Nounify-the-World/assetz/${category}/${category}-${partIndex}.png`;
-            }
-            
-            console.log("Loading sprite part:", imgPath);
-            loadImage(imgPath, img => {
-              partImages[category] = img;
-              loadedCount++;
-              console.log(`Loaded ${category} sprite (${loadedCount}/${totalPartsToLoad})`);
-              
-              // When all parts are loaded, build the sprite sheet
-              if (loadedCount === totalPartsToLoad) {
-                buildSpriteSheet();
-              }
-            }, error => {
-              console.warn(`Failed to load image for ${category}-${partIndex}:`, error);
-              loadedCount++;
-              
-              // Try to build sprite sheet even if some images failed to load
-              if (loadedCount === totalPartsToLoad) {
-                buildSpriteSheet();
-              }
-            });
-          }
-        }
-        } catch (err) {
-          console.error("Error creating custom sprite sheet:", err);
-          // Use default sprite sheet as fallback
-          if (player) {
-            player.spriteSheet = nounSpriteSheet;
-          }
-        }
-      }
-      
-      // Initialize the sprite chooser and prepare the game
-      async function initializeSpriteChooser() {
-        console.log("[DEBUG] → initializeSpriteChooser START");
-        
-        // Create a new sprite chooser instance if it doesn't exist
-        if (!spriteChooser) {
-          spriteChooser = new SpriteChooser();
-          
-          // Initialize the sprite chooser (this loads metadata and sets up UI)
-          const initialized = await spriteChooser.initialize();
-          if (!initialized) {
-            console.error("Failed to initialize sprite chooser");
-            // Fall back to start screen if sprite chooser fails
-            gameState = "start";
-            return;
-          }
-          
-          console.log("Sprite chooser initialized successfully");
-        }
-        
-        // Make sure the sprite chooser is visible
-        spriteChooser.setVisible(true);
-        
-        // Set game state to show the chooser
-        gameState = "chooser";
-        
-        console.log("[DEBUG] ← initializeSpriteChooser END");
       }
 
-      // Initialize the game
-      function initializeGame() {
-        console.log("[DEBUG] → initializeGame START");
-        
-        // Initialize the game using the existing initGame function
-        initGame();
-        
-        console.log("[DEBUG] ← initializeGame END", {
-          score,
-          noggles: noggles.length,
-          things: things.length,
-          platforms: platforms.length,
-          clouds: clouds.length,
-        });
+      function preload() {
+        // Start by showing zero progress
+        updateLoadingProgress(0);
+
+        // Load each asset with a callback to update progress
+        nounSpriteSheet = loadImage(
+          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/myNounsSpritesheet_003-ymLtEkBrlNZMQkj37npozrPDdamMbF.png",
+          () => updateLoadingProgress(),
+        );
+
+        noggleImg = loadImage(
+          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/glasses-square-red-ge40H7EEizX6BtKLM99M270Y9htR9s.png",
+          () => updateLoadingProgress(),
+        );
+
+        cloudImg = loadImage(
+          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/head-cloud-i9zXsgKYOqRd5S0VjKaziZYVDtZbmf.png",
+          () => updateLoadingProgress(),
+        );
+
+        thingSpriteSheet = loadImage(SPRITE_SHEET_URL, () => updateLoadingProgress());
+        thingSpriteSheetGrey = loadImage(GREY_SPRITE_SHEET_URL, () => updateLoadingProgress());
+
+        titleBg = loadImage(
+          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/nounifyTheWorldTitle_1-0Wbv9O9w8f1mM12NI9CssOfFIRXlKt.png",
+          () => updateLoadingProgress(),
+        );
       }
-      
-      function initGame() {
+
+      function setup() {
+        pixelDensity(window.devicePixelRatio || 1);
+        let cnv = createCanvas(500, 800).parent("game-container");
+        cnv.elt.removeAttribute("style");
+
+        // Add this line to make the canvas focusable
+        cnv.elt.setAttribute("tabindex", "0");
+
+        // Initially focus the canvas to ensure keyboard input works from the start
+        cnv.elt.focus();
+
+        // Handle canvas click events to ensure focus is regained
+        cnv.elt.addEventListener("click", function () {
+          cnv.elt.focus();
+        });
+
+        // Add event for window focus to prevent stuck keys
+        window.addEventListener("focus", function () {
+          // Reset any potentially stuck keys by using the keyTracker
+          document.querySelector("canvas").focus();
+        });
+
+        // Make sure loading screen is properly hidden
+        const loadingScreen = document.getElementById("p5_loading");
+        if (loadingScreen) {
+          // Add a "loaded" class for smooth transition
+          loadingScreen.classList.add("loaded");
+
+          // Then remove the element after transition completes
+          setTimeout(() => {
+            loadingScreen.style.display = "none";
+          }, 500);
+        }
+
+        noSmooth();
+        textAlign(CENTER, CENTER);
+        imageMode(CENTER);
+        colorMode(RGB, 255);
+
+        initializeGame();
+        // Position the player lower on the screen (show more ahead)
+        initialCameraY = player.y - height * 0.7; // Changed from height/2
+        cameraY = initialCameraY;
+        joystick.x = 80;
+        joystick.y = height - 80;
+        jumpBtn.x = width - 80;
+        jumpBtn.y = height - 80;
+
+        if (window.FarcadeSDK?.singlePlayer) {
+          window.FarcadeSDK.singlePlayer.actions.ready();
+        }
+      }
+
+      function initializeGame() {
         console.log("[DEBUG] → initializeGame START");
         randomSeed(millis());
         const dullKeys = Object.keys(dullPalettes),
@@ -644,7 +523,6 @@
         tagTimer = TAG_TIMER_MAX;
         previousJumpState = false;
 
-        // Create player with customized sprite sheet if available
         player = {
           x: 100,
           y: height - 100,
@@ -656,15 +534,10 @@
           wasOnGround: false,
           jumpSquash: 0,
           throwSquash: 0,
-          spriteSheet: nounSpriteSheet, // Default sprite sheet
+          spriteSheet: nounSpriteSheet,
           animation: { currentSet: "idle", facingDirection: 1, frameIndex: 0, tick: 0 },
           platformBelow: null, // Add tracking for the current platform the player is on
         };
-        
-        // Apply custom sprite sheet if one was selected
-        if (playerSpriteConfig) {
-          createCustomSpriteSheet();
-        }
 
         // Reset the target camera position but don't immediately set the actual camera position
         // This allows the camera to smoothly travel back to the start
@@ -938,7 +811,7 @@
           speedFactor: random(0.2, 0.5),
         }));
 
-        gameState = "start"; // Set to start state (sprite chooser will be initialized before this)
+        gameState = "start";
         console.log("[DEBUG] ← initializeGame END", {
           score,
           noggles: noggles.length,
@@ -953,147 +826,16 @@
         }, 100);
       }
 
-      // Handle loading screen completion
-      function hideLoadingScreen() {
-        const loadingScreen = document.getElementById("p5_loading");
-        if (loadingScreen) {
-          loadingScreen.classList.add("loaded");
-          setTimeout(() => {
-            loadingScreen.style.display = "none";
-          }, 500);
-        }
-      }
-      
-      // p5.js setup function - called automatically when p5 is ready
-      function setup() {
-        createCanvas(500, 800).parent("game-container");
-        frameRate(60);
-        
-        // Initialize empty arrays for game objects to prevent errors
-        clouds = [];
-        noggles = [];
-        things = [];
-        platforms = [];
-        particles = [];
-        particles.push = function() { return particles.length; }; // Override push method
-        
-        // Initialize goal with default values
-        goal = { 
-          x: 0, 
-          y: 0, 
-          w: 50, 
-          h: 50, 
-          color: '#FFFFFF' 
-        };
-        
-        // Initialize UI controls
-        jumpBtn = { 
-          x: width - 60, 
-          y: height - 60, 
-          r: 40 
-        };
-        
-        joystick = { 
-          x: 80, 
-          y: height - 60, 
-          inner: 20, 
-          outer: 80, 
-          activeRadius: 120 
-        };
-        
-        // Set initial game state to sprite chooser
-        gameState = "chooser";
-        
-        // Load game assets
-        loadGameAssets();
-      }
-      
-      // Load all game assets
-      function loadGameAssets() {
-        console.log("[DEBUG] → Loading game assets");
-        
-        // Initialize camera position
-        cameraX = 0;
-        cameraY = 0;
-        
-        // Create a default sprite sheet if needed (1x1 pixel of transparent color)
-        if (!nounSpriteSheet) {
-          nounSpriteSheet = createImage(FRAME_WIDTH, FRAME_HEIGHT);
-          nounSpriteSheet.loadPixels();
-          for (let i = 0; i < nounSpriteSheet.width; i++) {
-            for (let j = 0; j < nounSpriteSheet.height; j++) {
-              nounSpriteSheet.set(i, j, color(255, 0, 0, 100));
-            }
-          }
-          nounSpriteSheet.updatePixels();
-          console.log("Created default placeholder sprite sheet");
-          
-          // Ensure player has a sprite sheet
-          if (player) {
-            player.spriteSheet = nounSpriteSheet;
-          }
-        }
-        
-        // Load cloud image
-        try {
-          cloudImg = loadImage('https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/head-cloud-i9zXsgKYOqRd5S0VjKaziZYVDtZbmf.png', 
-            // Success callback
-            () => {
-              console.log("Cloud image loaded successfully");
-            }, 
-            // Error callback
-            (err) => {
-              console.error("Failed to load cloud image:", err);
-            }
-          );
-        } catch (err) {
-          console.error("Error loading cloud image:", err);
-        }
-        
-        // Load sprite sheets and other assets here
-        // This would normally be in preload() but we'll handle it manually
-        
-        // Update loading progress as assets load
-        const progressBar = document.getElementById("loading-progress-bar");
-        const loadingText = document.getElementById("loading-text");
-        
-        // Simulate loading progress
-        let progress = 0;
-        const loadingInterval = setInterval(() => {
-          progress += 10;
-          progressBar.style.width = progress + "%";
-          
-          if (progress >= 100) {
-            clearInterval(loadingInterval);
-            loadingText.innerText = "Ready to Play!";
-            
-            // Wait a moment before hiding loading screen
-            setTimeout(() => {
-              hideLoadingScreen();
-              // Now initialize the sprite chooser
-              initializeSpriteChooser();
-            }, 500);
-          } else {
-            loadingText.innerText = `Loading game assets (${progress}%)...`;
-          }
-        }, 200);
-      }
-      
       function draw() {
         // ── log whenever gameState changes ──
         if (gameState !== _prevState) {
           console.log(`[DEBUG] STATE: ${_prevState} → ${gameState}`);
           _prevState = gameState;
         }
-        
         background("#63A0F9");
         drawClouds();
 
-        if (gameState === 'chooser' && spriteChooser) {
-          // Update and draw the sprite chooser
-          spriteChooser.updateAnimation();
-          spriteChooser.draw(drawingContext, width, height);
-        } else if (gameState === "start") {
+        if (gameState === "start") {
           displayStartScreen();
         } else if (gameState === "playing") {
           runGame();
@@ -1300,54 +1042,19 @@
       function drawGameScene() {
         push();
         translate(-cameraX, -cameraY);
-        
-        // Draw each game element safely with error handling
-        try {
-          drawPlatforms();
-        } catch (err) {
-          console.error("Error drawing platforms:", err);
-        }
-        
-        try {
-          drawThings();
-        } catch (err) {
-          console.error("Error drawing things:", err);
-        }
-        
-        try {
-          drawGoal();
-        } catch (err) {
-          console.error("Error drawing goal:", err);
-        }
-        
-        try {
-          drawPlayer();
-        } catch (err) {
-          console.error("Error drawing player:", err);
-        }
-        
-        try {
-          drawNoggles();
-        } catch (err) {
-          console.error("Error drawing noggles:", err);
-        }
-        
+        drawPlatforms();
+        drawThings();
+        drawGoal();
+        drawPlayer();
+        drawNoggles();
         pop();
 
         // Draw particles after everything else
-        try {
-          updateAndDrawParticles();
-        } catch (err) {
-          console.error("Error drawing particles:", err);
-        }
+        updateAndDrawParticles();
 
         // Draw tag timer effects after everything else
         if (gameState === "playing") {
-          try {
-            drawTagCountdown();
-          } catch (err) {
-            console.error("Error drawing tag countdown:", err);
-          }
+          drawTagCountdown();
         }
       }
 
@@ -1455,9 +1162,6 @@
       }
 
       function drawClouds() {
-        // Check if clouds array exists and cloudImg is loaded
-        if (!clouds || !cloudImg) return;
-        
         imageMode(CENTER);
         noTint();
         clouds.forEach((c) => {
@@ -1645,6 +1349,7 @@
               stroke(0);
               strokeWeight(3);
               textSize(16);
+              textStyle(BOLD);
               text("NEW!", p.x + p.w / 2, p.y - 25);
               textStyle(NORMAL);
               strokeWeight(0);
@@ -1852,9 +1557,6 @@
       }
 
       function drawGoal() {
-        // Check if goal is defined and has required properties
-        if (!goal || !goal.color) return;
-        
         rectMode(CORNER);
         fill(goal.color);
         rect(goal.x, goal.y, goal.w, goal.h);
@@ -2486,13 +2188,6 @@
       }
 
       function drawPlayer() {
-        // Ensure player exists before attempting to draw
-        if (!player) {
-          console.warn("Cannot draw player: player object is undefined");
-          return;
-        }
-        
-        // If no sprite sheet is available, draw a simple rectangle
         if (!player.spriteSheet) {
           push();
           rectMode(CENTER);
@@ -2501,46 +2196,35 @@
           pop();
           return;
         }
-        
-        try {
-          const a = player.animation;
-          const dir = a.facingDirection === 1 ? "right" : "left";
-          const animMap = ANIMATION_MAP[a.currentSet][dir];
-          const frame = a.frameIndex % ANIMATION_DEFS[a.currentSet].frames;
-          const sx = (animMap.startFrame + frame) * FRAME_WIDTH;
-          const sy = animMap.row * FRAME_HEIGHT;
+        const a = player.animation;
+        const dir = a.facingDirection === 1 ? "right" : "left";
+        const animMap = ANIMATION_MAP[a.currentSet][dir];
+        const frame = a.frameIndex % ANIMATION_DEFS[a.currentSet].frames;
+        const sx = (animMap.startFrame + frame) * FRAME_WIDTH;
+        const sy = animMap.row * FRAME_HEIGHT;
 
-          // Use consistent 2.5 scale for character - maintains proportions in all animations
-          const playerScale = 2.5;
-          const dw = FRAME_WIDTH * playerScale;
-          const dh = FRAME_HEIGHT * playerScale;
+        // Use consistent 2.5 scale for character - maintains proportions in all animations
+        const playerScale = 2.5;
+        const dw = FRAME_WIDTH * playerScale;
+        const dh = FRAME_HEIGHT * playerScale;
 
-          push();
-          translate(player.x, player.y);
+        push();
+        translate(player.x, player.y);
 
-          // Keep track of jump animation state but don't apply squash/stretch scaling
-          if (player.jumpSquash > 0) {
-            player.jumpSquash = max(player.jumpSquash - 0.1, 0);
-          }
-
-          // Apply throw animation rotation only (no scaling)
-          if (player.throwSquash > 0) {
-            rotate(player.animation.facingDirection * customMap(player.throwSquash, 1, 0, PI / 16, 0));
-            player.throwSquash = max(player.throwSquash - 0.15, 0);
-          }
-
-          const yoff = (dh - player.height) / 2;
-          image(player.spriteSheet, 0, -yoff, dw, dh, sx, sy, FRAME_WIDTH, FRAME_HEIGHT);
-          pop();
-        } catch (err) {
-          // If any errors occur during sprite rendering, fall back to simple rectangle
-          console.error("Error drawing player sprite:", err);
-          push();
-          rectMode(CENTER);
-          fill(255, 0, 0);
-          rect(player.x, player.y, player.width, player.height);
-          pop();
+        // Keep track of jump animation state but don't apply squash/stretch scaling
+        if (player.jumpSquash > 0) {
+          player.jumpSquash = max(player.jumpSquash - 0.1, 0);
         }
+
+        // Apply throw animation rotation only (no scaling)
+        if (player.throwSquash > 0) {
+          rotate(player.animation.facingDirection * customMap(player.throwSquash, 1, 0, PI / 16, 0));
+          player.throwSquash = max(player.throwSquash - 0.15, 0);
+        }
+
+        const yoff = (dh - player.height) / 2;
+        image(player.spriteSheet, 0, -yoff, dw, dh, sx, sy, FRAME_WIDTH, FRAME_HEIGHT);
+        pop();
       }
 
       function drawUI() {
@@ -2791,18 +2475,6 @@
         // Always ensure keyboard focus on all mouse clicks
         document.querySelector("canvas").focus();
 
-        // Handle sprite chooser interaction
-        if (gameState === 'chooser') {
-          const result = spriteChooser.handleClick(mouseX, mouseY, width, height);
-          if (result === 'start') {
-            // User confirmed character, save configuration
-            playerSpriteConfig = spriteChooser.getCurrentConfig();
-            // Change to start screen
-            gameState = "start";
-          }
-          return false;
-        }
-
         if (gameState === "start") {
           initializeGame();
           gameState = "playing";
@@ -2816,19 +2488,6 @@
       }
 
       function touchStarted() {
-        // Handle sprite chooser interaction
-        if (gameState === 'chooser') {
-          if (touches.length > 0) {
-            const t = touches[touches.length - 1];
-            const result = spriteChooser.handleClick(t.x, t.y, width, height);
-            if (result === 'start') {
-              playerSpriteConfig = spriteChooser.getCurrentConfig();
-              gameState = "start";
-            }
-          }
-          return false;
-        }
-        
         if (gameState === "start") {
           initializeGame();
           gameState = "playing";
