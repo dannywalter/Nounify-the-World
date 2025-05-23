@@ -33,6 +33,16 @@ class SpriteChooser {
     
     // Create a placeholder image to use as fallback
     this.placeholderImage = this.createPlaceholderImage();
+    
+    // Create canvas for compositing character sprite sheets
+    this.compositeCanvas = document.createElement('canvas');
+    this.compositeCanvas.width = this.spriteSheetWidth;
+    this.compositeCanvas.height = this.spriteSheetHeight;
+    this.compositeCtx = this.compositeCanvas.getContext('2d');
+    this.compositeCtx.imageSmoothingEnabled = false;
+    
+    // Track when we need to rebuild the composite
+    this.needsCompositeRebuild = true;
   }
   
   // Create a placeholder sprite sheet for missing assets
@@ -44,42 +54,9 @@ class SpriteChooser {
     
     const ctx = canvas.getContext('2d');
     
-    // Fill with light gray background
-    ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
+    // Fill with transparent background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw grid lines to show frame boundaries
-    ctx.strokeStyle = 'rgba(150, 150, 150, 0.5)';
-    ctx.lineWidth = 1;
-    
-    // Draw vertical grid lines
-    for (let x = 0; x <= canvas.width; x += this.frameWidth) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-    
-    // Draw horizontal grid lines
-    for (let y = 0; y <= canvas.height; y += this.frameHeight) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
-    
-    // Draw question marks in the first row (walk right animation frames)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.font = 'bold 24px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Add question marks to the first 8 frames (walk right animation)
-    for (let i = 0; i < 8; i++) {
-      const frameX = i * this.frameWidth;
-      const frameY = 0; // First row
-      ctx.fillText('?', frameX + this.frameWidth/2, frameY + this.frameHeight/2);
-    }
     
     // Convert canvas to an Image object
     const img = new Image();
@@ -200,7 +177,10 @@ class SpriteChooser {
         
         // Create a promise that resolves when the image loads
         await new Promise((resolve, reject) => {
-          img.onload = resolve;
+          img.onload = () => {
+            this.needsCompositeRebuild = true; // Mark for rebuild when image loads
+            resolve();
+          };
           img.onerror = () => {
             console.warn(`Failed to load image: ${img.src}`);
             resolve(); // Resolve anyway to continue
@@ -221,6 +201,7 @@ class SpriteChooser {
     const cat = this.categories[category];
     cat.current = (cat.current + 1) % cat.count;
     this.loadPartImage(category, cat.current);
+    this.needsCompositeRebuild = true; // Mark for rebuild
   }
   
   // Change a specific category to the previous part
@@ -230,6 +211,33 @@ class SpriteChooser {
     const cat = this.categories[category];
     cat.current = (cat.current - 1 + cat.count) % cat.count;
     this.loadPartImage(category, cat.current);
+    this.needsCompositeRebuild = true; // Mark for rebuild
+  }
+  
+  // Create composite sprite sheet by layering all character parts
+  createCompositeSheet() {
+    // Clear the canvas
+    this.compositeCtx.clearRect(0, 0, this.spriteSheetWidth, this.spriteSheetHeight);
+    
+    // Draw order matters - back to front rendering
+    const drawOrder = ['body', 'belowthebelt', 'shoes', 'head', 'accessory', 'glasses'];
+    
+    for (const category of drawOrder) {
+      if (!this.categories[category] || this.categories[category].count <= 0) {
+        continue;
+      }
+      
+      const index = this.categories[category].current;
+      const imgKey = `${category}-${index}`;
+      const img = this.spriteImages[imgKey];
+      
+      if (img && img.complete && img.naturalWidth > 0) {
+        // Draw the entire sprite sheet for this part onto our composite
+        this.compositeCtx.drawImage(img, 0, 0, this.spriteSheetWidth, this.spriteSheetHeight);
+      }
+    }
+    
+    this.needsCompositeRebuild = false;
   }
   
   // Randomize all parts
@@ -255,6 +263,7 @@ class SpriteChooser {
         cat.current = 0;
       }
     }
+    this.needsCompositeRebuild = true; // Mark for rebuild
   }
   
   // Get current character configuration
@@ -294,60 +303,39 @@ class SpriteChooser {
   }
   
   drawCharacterPreview(ctx, x, y, scale) {
+    // Rebuild composite if needed
+    if (this.needsCompositeRebuild) {
+      this.createCompositeSheet();
+    }
+    
     // Get the current frame index for the walking animation
     const frameIndex = this.walkAnimation.currentFrame;
-    
-    // Draw each part of the character from back to front
-    const drawOrder = ['body', 'belowthebelt', 'shoes', 'head', 'accessory', 'glasses'];
     
     ctx.save();
     ctx.translate(x, y);
     
     try {
-      for (const part of drawOrder) {
-        // Skip drawing if the category doesn't exist or has no count
-        if (!this.categories[part] || this.categories[part].count <= 0) {
-          continue;
-        }
-        
-        const index = this.categories[part].current;
-        
-        // Skip if index is invalid
-        if (typeof index !== 'number' || isNaN(index) || index < 0) {
-          console.warn(`Invalid index for ${part}: ${index}`);
-          continue;
-        }
-        
-        const imgKey = `${part}-${index}`;
-        
-        // Try to use the loaded image, fall back to placeholder if needed
-        const imgToDraw = this.spriteImages[imgKey] || this.placeholderImage;
-        
-        if (imgToDraw) {
-          try {
-            // Create bobbing animation effect for character preview
-            let offsetY = Math.sin(Date.now() * 0.003) * 3; // Gentle bobbing effect
-            
-            // Calculate source coordinates for the current frame (first row, first 8 frames)
-            // Looking at the walk right animation frames (top row, first 8 frames)
-            const sourceX = frameIndex * this.frameWidth; // X position in sprite sheet
-            const sourceY = 0;                            // Y position (first row)
-            
-            // Draw the current frame centered and scaled appropriately
-            ctx.drawImage(
-              imgToDraw,
-              sourceX, sourceY,                      // Source X, Y - extract frame from sprite sheet
-              this.frameWidth, this.frameHeight,     // Source width/height - one frame
-              -this.frameWidth*scale/2, -this.frameHeight*scale/2 + offsetY,  // Destination X, Y with animation offset
-              this.frameWidth*scale, this.frameHeight*scale  // Destination width/height
-            );
-          } catch (imgErr) {
-            console.error(`Error drawing image for ${imgKey}:`, imgErr);
-          }
-        }
-      }
+      // Create bobbing animation effect for character preview
+      let offsetY = Math.sin(Date.now() * 0.003) * 3; // Gentle bobbing effect
+      
+      // Calculate source coordinates for the current frame (first row, walk right animation)
+      const sourceX = frameIndex * this.frameWidth; // X position in sprite sheet
+      const sourceY = 0;                            // Y position (first row)
+      
+      // Draw the current frame from our composite sprite sheet
+      ctx.drawImage(
+        this.compositeCanvas,                          // Use the composite sprite sheet
+        sourceX, sourceY,                              // Source X, Y - extract frame from sprite sheet
+        this.frameWidth, this.frameHeight,             // Source width/height - one frame
+        -this.frameWidth*scale/2, -this.frameHeight*scale/2 + offsetY,  // Destination X, Y with animation offset
+        this.frameWidth*scale, this.frameHeight*scale  // Destination width/height
+      );
     } catch (err) {
       console.error("Error in drawCharacterPreview:", err);
+      
+      // Fallback: draw a simple rectangle
+      ctx.fillStyle = '#888';
+      ctx.fillRect(-24*scale, -24*scale + offsetY, 48*scale, 48*scale);
     }
     
     ctx.restore();
