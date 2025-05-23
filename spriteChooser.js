@@ -80,11 +80,18 @@ class SpriteChooser {
       // Create sprite animations for proper character visualization
       this.prepareCharacterAnimations();
       
-      // Start loading images for each part
+      // Start loading images for each part and wait for completion
+      console.log("Preloading initial images...");
       await this.preloadImages();
+      console.log("Initial images loaded");
       
       // Set default randomized character
       this.randomizeAll();
+      
+      // Wait a bit for randomized images to load, then create initial composite
+      setTimeout(() => {
+        this.createCompositeSheet();
+      }, 500);
       
       this.isLoaded = true;
       this.isVisible = true;
@@ -139,9 +146,13 @@ class SpriteChooser {
   
   preloadImages() {
     // Start loading images for default selections
+    const loadPromises = [];
     for (const category in this.categories) {
-      this.loadPartImage(category, 0); // Load first image of each category
+      if (this.categories[category].count > 0) {
+        loadPromises.push(this.loadPartImage(category, 0)); // Load first image of each category
+      }
     }
+    return Promise.all(loadPromises);
   }
   
   async loadPartImage(category, index) {
@@ -216,11 +227,13 @@ class SpriteChooser {
   
   // Create composite sprite sheet by layering all character parts
   createCompositeSheet() {
-    // Clear the canvas
+    // Clear the canvas with transparent background
     this.compositeCtx.clearRect(0, 0, this.spriteSheetWidth, this.spriteSheetHeight);
     
     // Draw order matters - back to front rendering
     const drawOrder = ['body', 'belowthebelt', 'shoes', 'head', 'accessory', 'glasses'];
+    
+    let partsDrawn = 0;
     
     for (const category of drawOrder) {
       if (!this.categories[category] || this.categories[category].count <= 0) {
@@ -232,12 +245,26 @@ class SpriteChooser {
       const img = this.spriteImages[imgKey];
       
       if (img && img.complete && img.naturalWidth > 0) {
-        // Draw the entire sprite sheet for this part onto our composite
-        this.compositeCtx.drawImage(img, 0, 0, this.spriteSheetWidth, this.spriteSheetHeight);
+        try {
+          // Draw the entire sprite sheet for this part onto our composite
+          this.compositeCtx.drawImage(img, 0, 0, this.spriteSheetWidth, this.spriteSheetHeight);
+          partsDrawn++;
+          console.log(`Drew ${category} part to composite (${img.naturalWidth}x${img.naturalHeight})`);
+        } catch (err) {
+          console.error(`Error drawing ${category} to composite:`, err);
+        }
+      } else {
+        console.warn(`Image not ready for ${category}-${index}:`, img ? `${img.complete}, ${img.naturalWidth}x${img.naturalHeight}` : 'null');
       }
     }
     
-    this.needsCompositeRebuild = false;
+    if (partsDrawn > 0) {
+      console.log(`Composite created with ${partsDrawn} parts`);
+      this.needsCompositeRebuild = false;
+    } else {
+      console.warn("No parts were drawn to composite - all images may still be loading");
+      // Don't mark as complete if no parts were drawn
+    }
   }
   
   // Randomize all parts
@@ -322,19 +349,37 @@ class SpriteChooser {
       const sourceX = frameIndex * this.frameWidth; // X position in sprite sheet
       const sourceY = 0;                            // Y position (first row)
       
-      // Draw the current frame from our composite sprite sheet
-      ctx.drawImage(
-        this.compositeCanvas,                          // Use the composite sprite sheet
-        sourceX, sourceY,                              // Source X, Y - extract frame from sprite sheet
-        this.frameWidth, this.frameHeight,             // Source width/height - one frame
-        -this.frameWidth*scale/2, -this.frameHeight*scale/2 + offsetY,  // Destination X, Y with animation offset
-        this.frameWidth*scale, this.frameHeight*scale  // Destination width/height
-      );
+      // Check if we have a valid composite canvas with content
+      const compositeImageData = this.compositeCtx.getImageData(0, 0, this.spriteSheetWidth, this.spriteSheetHeight);
+      const hasContent = compositeImageData.data.some(pixel => pixel !== 0);
+      
+      if (hasContent) {
+        // Draw the current frame from our composite sprite sheet
+        ctx.drawImage(
+          this.compositeCanvas,                          // Use the composite sprite sheet
+          sourceX, sourceY,                              // Source X, Y - extract frame from sprite sheet
+          this.frameWidth, this.frameHeight,             // Source width/height - one frame
+          -this.frameWidth*scale/2, -this.frameHeight*scale/2 + offsetY,  // Destination X, Y with animation offset
+          this.frameWidth*scale, this.frameHeight*scale  // Destination width/height
+        );
+      } else {
+        // Fallback: draw a simple animated placeholder
+        ctx.fillStyle = '#FFD700';
+        const size = 32 * scale;
+        ctx.fillRect(-size/2, -size/2 + offsetY, size, size);
+        
+        // Add loading text
+        ctx.fillStyle = '#000';
+        ctx.font = `${12 * scale}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText('Loading...', 0, offsetY + 5 * scale);
+      }
     } catch (err) {
       console.error("Error in drawCharacterPreview:", err);
       
       // Fallback: draw a simple rectangle
       ctx.fillStyle = '#888';
+      const offsetY = Math.sin(Date.now() * 0.003) * 3;
       ctx.fillRect(-24*scale, -24*scale + offsetY, 48*scale, 48*scale);
     }
     
