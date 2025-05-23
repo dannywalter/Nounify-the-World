@@ -361,12 +361,14 @@ class SpriteChooser {
             // Create bobbing animation effect for character preview
             let offsetY = Math.sin(Date.now() * 0.003) * 3; // Gentle bobbing effect
             
-            // For single frame sprites (the actual case), draw the whole image
-            // but centered and scaled appropriately
+            // Extract the current animation frame from the sprite sheet
+            // and draw it centered and scaled appropriately
             ctx.drawImage(
               imgToDraw,
-              -frameWidth*scale/2, -frameHeight*scale/2 + offsetY, // Add bobbing offset
-              frameWidth*scale, frameHeight*scale
+              frameOffset * frameWidth, 0, // Source X, Y - extract the current frame from the first row
+              frameWidth, frameHeight,     // Source width/height - one frame
+              -frameWidth*scale/2, -frameHeight*scale/2 + offsetY, // Destination X, Y with bobbing offset
+              frameWidth*scale, frameHeight*scale // Destination width/height
             );
           } catch (imgErr) {
             console.error(`Error drawing image for ${imgKey}:`, imgErr);
