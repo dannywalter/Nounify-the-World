@@ -23,7 +23,7 @@ class SpriteChooser {
   createPlaceholderImage() {
     // Create an off-screen canvas to generate a placeholder
     const canvas = document.createElement('canvas');
-    canvas.width = 384; // 8 frames of 48px width
+    canvas.width = 48; // Single 48x48 frame
     canvas.height = 48;
     
     const ctx = canvas.getContext('2d');
@@ -38,24 +38,12 @@ class SpriteChooser {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw frame separators
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 8; i++) {
-      ctx.beginPath();
-      ctx.moveTo(i * 48, 0);
-      ctx.lineTo(i * 48, 48);
-      ctx.stroke();
-    }
-    
-    // Draw question mark in each frame
+    // Draw question mark in the center
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.font = 'bold 30px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    for (let i = 0; i < 8; i++) {
-      ctx.fillText('?', i * 48 + 24, 24);
-    }
+    ctx.fillText('?', 24, 24);
     
     // Convert canvas to an Image object
     const img = new Image();
@@ -96,68 +84,17 @@ class SpriteChooser {
     }
   }
   
-  // Create a simple placeholder image when actual images fail to load
-  createPlaceholderImage() {
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 384; // 8 frames x 48px width
-      canvas.height = 48;
-      const ctx = canvas.getContext('2d');
-      
-      // Draw a colorful gradient background
-      const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
-      gradient.addColorStop(0, '#FF5555');
-      gradient.addColorStop(0.25, '#FFAA55');
-      gradient.addColorStop(0.5, '#55FF55');
-      gradient.addColorStop(0.75, '#5555FF');
-      gradient.addColorStop(1, '#AA55FF');
-      
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, 48);
-      
-      // Draw frame separators for animation frames
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.lineWidth = 1;
-      for (let i = 1; i < 8; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * 48, 0);
-        ctx.lineTo(i * 48, 48);
-        ctx.stroke();
-      }
-      
-      // Draw question mark in each frame to indicate missing asset
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 24px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (let i = 0; i < 8; i++) {
-        ctx.fillText('?', i * 48 + 24, 24);
-      }
-      
-      // Convert to Image object
-      this.placeholderImage = new Image();
-      this.placeholderImage.src = canvas.toDataURL('image/png');
-      
-      console.log("Created animated placeholder image for fallbacks");
-    } catch (err) {
-      console.error("Failed to create placeholder image:", err);
-    }
-  }
-  
   // Prepare character animations for proper display
   prepareCharacterAnimations() {
     console.log("Preparing character animations");
     
-    // Set up animation parameters
+    // Set up animation parameters for simple walking effect
     this.walkAnimation = { 
-      frames: 8,           // 8 frames per animation
+      frames: 8,           // 8 animation steps for smooth movement
       speed: 6,            // Update every 6 frames (10fps at 60fps base)
-      currentFrame: 0,     // Current animation frame
+      currentFrame: 0,     // Current animation step
       tick: 0              // Animation timer
     };
-    
-    // Create frame-by-frame animation templates for each character part
-    // This would be used for more sophisticated animations in the future
   }
   
   processMetadata(metadata) {
@@ -327,11 +264,9 @@ class SpriteChooser {
     // Draw each part of the character from back to front
     const drawOrder = ['body', 'belowthebelt', 'shoes', 'head', 'accessory', 'glasses'];
     
-    // Frame constants - for a 16x8 sprite sheet
-    const frameWidth = 48;  // Each frame is 48x48 pixels
+    // Frame constants - individual sprites are 48x48 pixels
+    const frameWidth = 48;  // Each sprite is 48x48 pixels
     const frameHeight = 48;
-    const framesPerRow = 16;  // 16 frames per row
-    const numRows = 8;        // 8 rows total
     
     ctx.save();
     ctx.translate(x, y);
@@ -361,13 +296,14 @@ class SpriteChooser {
             // Create bobbing animation effect for character preview
             let offsetY = Math.sin(Date.now() * 0.003) * 3; // Gentle bobbing effect
             
-            // Extract the current animation frame from the sprite sheet
-            // and draw it centered and scaled appropriately
+            // Add horizontal walking animation by shifting position slightly
+            let offsetX = Math.sin(frameOffset * 0.8) * 2; // Gentle side-to-side movement
+            
+            // Individual sprites are single 48x48 images, not sprite sheets
+            // Draw the entire image scaled appropriately with animation offset
             ctx.drawImage(
               imgToDraw,
-              frameOffset * frameWidth, 0, // Source X, Y - extract the current frame from the first row
-              frameWidth, frameHeight,     // Source width/height - one frame
-              -frameWidth*scale/2, -frameHeight*scale/2 + offsetY, // Destination X, Y with bobbing offset
+              -frameWidth*scale/2 + offsetX, -frameHeight*scale/2 + offsetY, // Destination X, Y with animation offset
               frameWidth*scale, frameHeight*scale // Destination width/height
             );
           } catch (imgErr) {
