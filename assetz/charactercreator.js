@@ -1,0 +1,171 @@
+// Parts to include in character creator (excluding background)
+const parts = ['body', 'accessory', 'head', 'glasses', 'belowthebelt', 'shoes'];
+const canvas = document.getElementById('canvas');
+const preview = document.getElementById('preview');
+const ctx = canvas.getContext('2d');
+const previewCtx = preview.getContext('2d');
+let spritesheet;
+let currentFrame = 0;
+let assets = {};
+let layerSelections = {};
+
+// Disable image smoothing
+ctx.imageSmoothingEnabled = false;
+previewCtx.imageSmoothingEnabled = false;
+
+// Initialize - load assets and build UI
+async function init() {
+  try {
+    // Load assets.json with timeout
+    const response = await fetch('./assets.json');
+    assets = await response.json();
+    
+    // Build UI selectors
+    buildSelectors();
+    
+    // Set initial random selections
+    randomizeCharacter();
+    
+    // Start animation
+    animate();
+  } catch (error) {
+    console.error('Failed to load assets:', error);
+    document.body.innerHTML = '<h2>Failed to load assets. Please check console.</h2>';
+  }
+}
+
+// Build the dropdown selectors for each part
+function buildSelectors() {
+  const optionsDiv = document.querySelector('.options');
+  
+  parts.forEach(part => {
+    // Get asset files for this part
+    const options = assets.find(a => a.type === part)?.src || [];
+    if (options.length === 0) return;
+    
+    const partDiv = document.createElement('div');
+    partDiv.className = 'part';
+    
+    const label = document.createElement('label');
+    label.textContent = part.charAt(0).toUpperCase() + part.slice(1);
+    
+    const select = document.createElement('select');
+    select.id = `${part}-select`;
+    select.addEventListener('change', (e) => {
+      layerSelections[part] = e.target.value;
+      redrawLayers();
+    });
+    
+    // Add options to the dropdown
+    options.forEach(option => {
+      const opt = document.createElement('option');
+      opt.value = option;
+      opt.textContent = option.replace('.png', '').replace(/^[^-]+-/, '');
+      select.appendChild(opt);
+    });
+    
+    partDiv.appendChild(label);
+    partDiv.appendChild(select);
+    optionsDiv.appendChild(partDiv);
+  });
+  
+  // Set up button listeners
+  document.getElementById('randomizeBtn').addEventListener('click', randomizeCharacter);
+  document.getElementById('useButton').addEventListener('click', useInGame);
+}
+
+// Random character generation
+function randomizeCharacter() {
+  parts.forEach(part => {
+    const select = document.getElementById(`${part}-select`);
+    if (select && select.options.length) {
+      const randomIndex = Math.floor(Math.random() * select.options.length);
+      select.selectedIndex = randomIndex;
+      layerSelections[part] = select.value;
+    }
+  });
+  
+  redrawLayers();
+}
+
+// Load an image with proper cross-origin settings
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+    img.src = src;
+  });
+}
+
+// Redraw all selected layers
+async function redrawLayers() {
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw each selected layer
+  for (const part of parts) {
+    const partSrc = layerSelections[part];
+    if (!partSrc) continue;
+    
+    try {
+      const img = await loadImage(`${part}/${partSrc}`);
+      ctx.drawImage(img, 0, 0);
+    } catch (err) {
+      console.error(`Failed to load ${part}/${partSrc}`, err);
+    }
+  }
+  
+  // Update spritesheet image data
+  spritesheet = new Image();
+  spritesheet.src = canvas.toDataURL('image/png');
+}
+
+// Animation loop for the preview
+function animate() {
+  // Animation frame calculation (8 frames total)
+  currentFrame = (currentFrame + 1) % 8;
+  
+  // Clear the preview canvas
+  previewCtx.clearRect(0, 0, preview.width, preview.height);
+  
+  // Calculate frames for walking animation
+  const srcX = currentFrame * 48; // 48px per frame
+  const srcY = 0; // First row contains walk right animation
+  
+  // Draw the current frame centered in the preview
+  if (spritesheet) {
+    previewCtx.drawImage(
+      spritesheet,
+      srcX, srcY, 48, 48,
+      preview.width/2 - 60, preview.height/2 - 60, 120, 120
+    );
+  }
+  
+  // Continue animation
+  setTimeout(() => {
+    requestAnimationFrame(animate);
+  }, 100); // ~10fps animation
+}
+
+// Send the generated spritesheet to the game
+function useInGame() {
+  const spritesheetData = canvas.toDataURL('image/png');
+  
+  // Try to send message to parent window
+  try {
+    window.parent.postMessage({
+      type: 'spriteUpdate',
+      spritesheetDataUrl: spritesheetData
+    }, '*');
+    
+    alert('Character sent to game!');
+  } catch (err) {
+    console.error('Failed to send character to game', err);
+    alert('Unable to send character to game. Are you running this from the game page?');
+  }
+}
+
+// Start initialization
+init();

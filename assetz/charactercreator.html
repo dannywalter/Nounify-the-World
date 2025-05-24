@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Character Creator</title>
+  <style>
+    body { font-family: Arial; margin: 0; padding: 20px; background: #f0f0f0; }
+    .options { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .part { display: flex; flex-direction: column; min-width: 140px; }
+    canvas { border: 1px solid #ccc; margin: 10px auto; }
+    button { padding: 10px; margin: 5px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+    #useButton { background: #ff5722; font-weight: bold; font-size: 16px; }
+    .preview { text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Create Your Character</h1>
+  
+  <div class="options">
+    <!-- Part selectors get inserted here by script -->
+  </div>
+  
+  <div class="preview">
+    <canvas id="canvas" width="768" height="384"></canvas>
+    <canvas id="preview" width="500" height="500"></canvas>
+    
+    <div>
+      <button id="randomizeBtn">Randomize!</button>
+      <button id="useButton">Use in Game!</button>
+    </div>
+  </div>
+  
+  <script src="charactercreator.js"></script>
+</body>
+</html>

@@ -2653,5 +2653,13 @@
         // implement pausing/resuming audio
       }
     </script>
-  </body>
+    <div id="characterCreatorModal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8);">
+    <div style="position: relative; width: 90%; max-width: 800px; height: 90%; margin: 2% auto; background: white; overflow: hidden;">
+      <span onclick="document.getElementById('characterCreatorModal').style.display='none'" 
+            style="position: absolute; right: 15px; top: 10px; font-size: 24px; cursor: pointer; z-index: 1001;">&times;</span>
+      <iframe id="characterCreatorFrame" style="width: 100%; height: 100%; border: none;" 
+              src="assetz/charactercreator.html"></iframe>
+    </div>
+  </div>
+</body>
 </html>
