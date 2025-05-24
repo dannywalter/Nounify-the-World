@@ -9,6 +9,17 @@ let currentFrame = 0;
 let assets = {};
 let layerSelections = {};
 
+// Helper to get parent origin safely
+function getParentOrigin() {
+  try {
+    return window.parent.location.origin;
+  } catch (e) {
+    const a = document.createElement('a');
+    a.href = document.referrer;
+    return a.origin;
+  }
+}
+
 // Disable image smoothing
 ctx.imageSmoothingEnabled = false;
 previewCtx.imageSmoothingEnabled = false;
@@ -17,7 +28,7 @@ previewCtx.imageSmoothingEnabled = false;
 async function init() {
   try {
     // Load assets.json with timeout
-    const response = await fetch('./assets.json');
+    const response = await fetch('https://dannywalter.github.io/Nounify-the-World/assetz/assets.json');
     assets = await response.json();
     
     // Build UI selectors
@@ -151,20 +162,36 @@ function animate() {
 
 // Send the generated spritesheet to the game
 function useInGame() {
+  const parentOrigin = getParentOrigin() || '*'; // fallback to '*' if unknown
   const spritesheetData = canvas.toDataURL('image/png');
-  
-  // Try to send message to parent window
-  try {
-    window.parent.postMessage({
-      type: 'spriteUpdate',
-      spritesheetDataUrl: spritesheetData
-    }, '*');
-    
-    alert('Character sent to game!');
-  } catch (err) {
-    console.error('Failed to send character to game', err);
-    alert('Unable to send character to game. Are you running this from the game page?');
+  const glassesPart = layerSelections['glasses'];
+  if (glassesPart) {
+    const img = new window.Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 48;
+      tempCanvas.height = 48;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(img, 0, 0, 48, 48, 0, 0, 48, 48);
+      const glassesDataUrl = tempCanvas.toDataURL('image/png');
+      window.parent.postMessage({
+        type: 'spriteUpdate',
+        spritesheetDataUrl: spritesheetData,
+        noggleDataUrl: glassesDataUrl
+      }, parentOrigin);
+      alert('Character sent to game!');
+    };
+    img.src = `https://dannywalter.github.io/Nounify-the-World/assetz/glasses/${glassesPart}`;
+    return;
   }
+  // If no glasses selected, just send the spritesheet
+  window.parent.postMessage({
+    type: 'spriteUpdate',
+    spritesheetDataUrl: spritesheetData,
+    noggleDataUrl: null
+  }, parentOrigin);
+  alert('Character sent to game!');
 }
 
 // Start initialization

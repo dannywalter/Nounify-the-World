@@ -327,7 +327,36 @@
         "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/spritesheet_things_80-VYQyfGsuWRfn5VjS8uiyEkpRIo7PXu.png";
       const GREY_SPRITE_SHEET_URL =
         "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/spritesheet_things_80_grey-EL90MwmI8yNVOFHmv7p0srC7YMfWfD.png";
-      const THING_FRAME_SIZE = 64;
+      
+        // Listen for messages from the character creator iframe
+window.addEventListener('message', function(event) {
+  // For local dev, you may skip origin check. For production, check event.origin!
+  if (event.data && event.data.type === 'spriteUpdate') {
+    loadImage(event.data.spritesheetDataUrl, (img) => {
+      customPlayerSpriteSheet = img; // <--- store globally
+      player.spriteSheet = img;
+      // Handle custom noggles
+      if (event.data.noggleDataUrl) {
+        loadImage(event.data.noggleDataUrl, (nogImg) => {
+          customPlayerNoggles = nogImg;
+          noggleImg = nogImg; // Update immediately for current session
+          // 👇 Add this debug log here:
+          console.log("Custom noggle image set!", nogImg, "Data URL:", event.data.noggleDataUrl);
+        });
+      }
+      // Optionally show a confirmation
+      const confirmMsg = document.createElement('div');
+      confirmMsg.textContent = "Character updated!";
+      confirmMsg.style = "position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#4CAF50; color:white; padding:10px; border-radius:5px; z-index:1000";
+      document.body.appendChild(confirmMsg);
+      setTimeout(() => document.body.removeChild(confirmMsg), 2000);
+      // Hide the modal
+      document.getElementById('characterCreatorModal').style.display = 'none';
+    });
+  }
+});
+      
+        const THING_FRAME_SIZE = 64;
       const THING_FRAMES_PER_ROW = 20;
       const TOTAL_THING_ROWS = 4;
       const TOTAL_THING_FRAMES = THING_FRAMES_PER_ROW * TOTAL_THING_ROWS;
@@ -375,6 +404,8 @@
         jumpBufferTimer = 0,
         tagTimer = TAG_TIMER_MAX,
         previousJumpState = false; // Track jump button state for edge detection
+      let customPlayerSpriteSheet = null;
+      let customPlayerNoggles = null;
 
       // Debug mode variables
       let debugMode = false;
@@ -434,9 +465,9 @@
         );
 
         noggleImg = loadImage(
-          "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/glasses-square-red-ge40H7EEizX6BtKLM99M270Y9htR9s.png",
-          () => updateLoadingProgress(),
-        );
+  "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/glasses-square-red-ge40H7EEizX6BtKLM99M270Y9htR9s.png",
+  () => updateLoadingProgress(),
+);
 
         cloudImg = loadImage(
           "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/u0NamAsZmpLH/head-cloud-i9zXsgKYOqRd5S0VjKaziZYVDtZbmf.png",
@@ -534,7 +565,7 @@
           wasOnGround: false,
           jumpSquash: 0,
           throwSquash: 0,
-          spriteSheet: nounSpriteSheet,
+          spriteSheet: customPlayerSpriteSheet ? customPlayerSpriteSheet : nounSpriteSheet,
           animation: { currentSet: "idle", facingDirection: 1, frameIndex: 0, tick: 0 },
           platformBelow: null, // Add tracking for the current platform the player is on
         };
@@ -1581,7 +1612,8 @@
           push();
           translate(n.x, n.y);
           rotate(n.angle);
-          const sz = n.r * 10;
+          const sz = n.r * 14;
+          const offset = (sz / 48) * 8; // 8px offset at 48px base, scales with size
 
           // Add glow effect for noggles in flight
           if (n.hasTrail) {
@@ -1589,7 +1621,7 @@
             drawingContext.shadowColor = "rgba(255, 50, 50, 0.5)";
           }
 
-          image(noggleImg, 0, 0, sz, sz);
+          image(noggleImg, offset, offset, sz, sz);
           pop();
         });
       }
@@ -2281,6 +2313,12 @@
         noTint();
         image(titleBg, 0, 0, width, height);
         pop();
+        noStroke();
+fill(0, 0, 0, 100);
+rect(width / 2 - 100, height / 2 + 100, 200, 40, 10);
+fill(255, 255, 100);
+textSize(20);
+text("Customize Character", width / 2, height / 2 + 120);
 
         // calculate Y positions
         const startY = height - 10; // bottom edge for “Tap to Start”
@@ -2475,11 +2513,23 @@
         // Always ensure keyboard focus on all mouse clicks
         document.querySelector("canvas").focus();
 
-        if (gameState === "start") {
-          initializeGame();
-          gameState = "playing";
-          return false;
-        }
+        // 1. Check for "Customize Character" button FIRST
+  if (
+    gameState === "start" &&
+    mouseX > width / 2 - 100 && mouseX < width / 2 + 100 &&
+    mouseY > height / 2 + 100 && mouseY < height / 2 + 140
+  ) {
+    document.getElementById('characterCreatorModal').style.display = 'block';
+    return false; // Prevent further processing
+  }
+
+  // 2. Only start the game if not clicking the button
+  if (gameState === "start") {
+    initializeGame();
+    gameState = "playing";
+    return false;
+  }
+
         if (gameState === "playing") {
           // Use our improved throw handler
           handleThrowInput(mouseX, mouseY);
@@ -2658,7 +2708,7 @@
       <span onclick="document.getElementById('characterCreatorModal').style.display='none'" 
             style="position: absolute; right: 15px; top: 10px; font-size: 24px; cursor: pointer; z-index: 1001;">&times;</span>
       <iframe id="characterCreatorFrame" style="width: 100%; height: 100%; border: none;" 
-              src="assetz/charactercreator.html"></iframe>
+              src="https://dannywalter.github.io/Nounify-the-World/assetz/charactercreator.html"></iframe>
     </div>
   </div>
 </body>
