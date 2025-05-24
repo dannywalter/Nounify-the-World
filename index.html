@@ -2538,41 +2538,58 @@ text("Customize Character", width / 2, height / 2 + 120);
       }
 
       function touchStarted() {
-        if (gameState === "start") {
-          initializeGame();
-          gameState = "playing";
-          // Also focus canvas on touch start to enable keyboard fallbacks
-          document.querySelector("canvas").focus();
-          return false;
-        }
+  // If the character creator modal is open, do nothing
+  if (document.getElementById('characterCreatorModal').style.display === 'block') {
+    return false;
+  }
 
-        if (gameState === "playing") {
-          const t = touches[touches.length - 1];
+  // Check for "Customize Character" button tap FIRST
+  if (
+    gameState === "start" &&
+    touches.length > 0 &&
+    touches[0].x > width / 2 - 100 && touches[0].x < width / 2 + 100 &&
+    touches[0].y > height / 2 + 100 && touches[0].y < height / 2 + 140
+  ) {
+    document.getElementById('characterCreatorModal').style.display = 'block';
+    return false; // Prevent further processing
+  }
 
-          // Store the touch ID to track it
-          if (t && t.id !== undefined) {
-            activeTouchIds[t.id] = {
-              startX: t.x,
-              startY: t.y,
-              time: millis(),
-            };
-          }
+  // Only start the game if not clicking the button
+  if (gameState === "start") {
+    initializeGame();
+    gameState = "playing";
+    // Also focus canvas on touch start to enable keyboard fallbacks
+    document.querySelector("canvas").focus();
+    return false;
+  }
 
-          if (dist(t.x, t.y, jumpBtn.x, jumpBtn.y) <= jumpBtn.r) {
-            jumpBufferTimer = 6;
-            tryPerformJump();
-            return false;
-          }
+  if (gameState === "playing") {
+    const t = touches[touches.length - 1];
 
-          // Use our improved throw handler - only on touchStart
-          if (handleThrowInput(t.x, t.y)) {
-            return false;
-          }
+    // Store the touch ID to track it
+    if (t && t.id !== undefined) {
+      activeTouchIds[t.id] = {
+        startX: t.x,
+        startY: t.y,
+        time: millis(),
+      };
+    }
 
-          return false;
-        }
-        return false;
-      }
+    if (dist(t.x, t.y, jumpBtn.x, jumpBtn.y) <= jumpBtn.r) {
+      jumpBufferTimer = 6;
+      tryPerformJump();
+      return false;
+    }
+
+    // Use our improved throw handler - only on touchStart
+    if (handleThrowInput(t.x, t.y)) {
+      return false;
+    }
+
+    return false;
+  }
+  return false;
+}
 
       // Add touchEnded handler to prevent double throws
       function touchEnded() {
