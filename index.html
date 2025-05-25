@@ -304,6 +304,8 @@
         mixed: { start: 0.2, end: 1.0 }, // Final 80% - mix everything (expanded)
       };
 
+      const boldBrightPalette = ["#F20422", "#FF1AD2", "#FFC110", "#1929F4", "#00FCFF"];
+      
       const brightPalettes = {
         "Deep Fried": ["#B9185C", "#D22209", "#C16710", "#D08B11", "#FFE939"],
         "User Gnome": ["#FF1A0B", "#EC5B43", "#FFA21E", "#00A556", "#068940"],
@@ -857,14 +859,237 @@ window.addEventListener('message', function(event) {
         }, 100);
       }
 
+      // New styles for Bold & Bright theme
+      const STYLE = {
+        colors: {
+          // Bold & Bright palette
+          red: "#F20422",
+          pink: "#FF1AD2", 
+          yellow: "#FFC110",
+          blue: "#1929F4",
+          cyan: "#00FCFF",
+          // Additional colors for background elements
+          sky: "#63A0F9",
+          outlineColor: "#000000",
+          windowColor: "#FFFFFF",
+          roadColor: "#333333",
+          sidewalkColor: "#CCCCCC"
+        },
+        buildings: {
+          outlineWeight: 3,
+          minWidth: 60,
+          maxWidth: 150,
+          minHeight: 100,
+          maxHeight: 350,
+          windowSize: 10,
+          windowGap: 5
+        }
+      };
+      
+      // Building cache for rendering efficiency
+      let backgroundBuildings = [];
+      let foregroundBuildings = [];
+      let cityBackground = null;
+      
+      // Generate buildings for the city background
+      function generateCityBackground() {
+        // Clear existing building arrays
+        backgroundBuildings = [];
+        foregroundBuildings = [];
+        
+        // Generate background buildings
+        let x = 0;
+        while (x < LEVEL_LENGTH) {
+          const w = random(STYLE.buildings.minWidth, STYLE.buildings.maxWidth);
+          const h = random(STYLE.buildings.minHeight, STYLE.buildings.maxHeight);
+          const y = height - h;
+          const type = floor(random(3)); // 0=bg, 1=fg, 2=special
+          
+          // Assign color based on Bold & Bright palette
+          const colors = [STYLE.colors.red, STYLE.colors.pink, STYLE.colors.yellow, 
+                          STYLE.colors.blue, STYLE.colors.cyan];
+          const color = colors[floor(random(colors.length))];
+          
+          const building = {
+    x, y, w, h, color, type,
+    windowRows: floor(h / (STYLE.buildings.windowSize + STYLE.buildings.windowGap)),
+    windowCols: floor(w / (STYLE.buildings.windowSize + STYLE.buildings.windowGap)),
+    hasAntenna: random() > 0.7,
+  antennaHeight: random(20, 50), // Store the height permanently
+    hasSign: random() > 0.8,
+    // Add this new property - a 2D array of window visibility
+    windows: []
+  };
+  
+  // Generate window visibility pattern when the building is created
+  for (let r = 0; r < building.windowRows; r++) {
+    building.windows[r] = [];
+    for (let c = 0; c < building.windowCols; c++) {
+      // Store whether this window should be visible (true/false)
+      building.windows[r][c] = random() > 0.3;
+    }
+  }
+          
+          if (type === 0) {
+            backgroundBuildings.push(building);
+          } else {
+            foregroundBuildings.push(building);
+          }
+          
+          x += w - random(w/4); // Slight overlap for density
+        }
+        
+        // Sort buildings by height for layered rendering
+        backgroundBuildings.sort((a, b) => a.h - b.h);
+      }
+      
+      // Draw a single building with the Bold & Bright style
+      function drawBuilding(building, outline = true) {
+        const {x, y, w, h, color, windowRows, windowCols} = building;
+        
+        // Draw main building shape
+        fill(color);
+        if (outline) {
+          strokeWeight(STYLE.buildings.outlineWeight);
+          stroke(STYLE.colors.outlineColor);
+        } else {
+          noStroke();
+        }
+        rect(x, y, w, h, 2); // Slightly rounded corners
+        
+        // Draw windows using the pre-computed visibility
+  fill(STYLE.colors.windowColor);
+  noStroke();
+  const windowSize = STYLE.buildings.windowSize;
+  const gap = STYLE.buildings.windowGap;
+  
+  for (let r = 0; r < windowRows; r++) {
+    for (let c = 0; c < windowCols; c++) {
+      // Use the stored visibility instead of calling random() each time
+      if (building.windows[r][c]) {
+        const wx = x + gap + c * (windowSize + gap);
+        const wy = y + gap + r * (windowSize + gap);
+        rect(wx, wy, windowSize, windowSize);
+      }
+    }
+  }
+        
+        // Draw antenna or sign if applicable
+        if (building.hasAntenna) {
+          strokeWeight(STYLE.buildings.outlineWeight);
+          stroke(STYLE.colors.outlineColor);
+          line(x + w/2, y, x + w/2, y - building.antennaHeight); // Use stored height
+        }
+        
+        if (building.hasSign) {
+          fill(STYLE.colors.yellow);
+          stroke(STYLE.colors.outlineColor);
+          rect(x + w/4, y, w/2, 20, 2);
+        }
+      }
+      
+      // Draw a stylized cloud
+      function drawStylizedCloud(x, y, size) {
+        push();
+        noStroke();
+        fill(255);
+        ellipseMode(CENTER);
+        
+        // Draw cloud body
+        ellipse(x, y, size, size * 0.6);
+        ellipse(x - size * 0.4, y, size * 0.6, size * 0.4);
+        ellipse(x + size * 0.4, y, size * 0.6, size * 0.4);
+        
+        // Draw outline
+        stroke(0);
+        strokeWeight(2);
+        noFill();
+        beginShape();
+        vertex(x - size * 0.7, y);
+        bezierVertex(x - size * 0.7, y - size * 0.3, 
+                     x - size * 0.3, y - size * 0.4, 
+                     x, y - size * 0.3);
+        bezierVertex(x + size * 0.3, y - size * 0.4, 
+                     x + size * 0.7, y - size * 0.3, 
+                     x + size * 0.7, y);
+        bezierVertex(x + size * 0.7, y + size * 0.3, 
+                     x + size * 0.3, y + size * 0.3, 
+                     x, y + size * 0.3);
+        bezierVertex(x - size * 0.3, y + size * 0.3, 
+                     x - size * 0.7, y + size * 0.3, 
+                     x - size * 0.7, y);
+        endShape();
+        pop();
+      }
+      
+      // Draw a procedural city background
+      function drawCityBackground() {
+        // If we haven't generated buildings yet, do so
+        if (backgroundBuildings.length === 0 && foregroundBuildings.length === 0) {
+          generateCityBackground();
+        }
+        
+        // Draw sky
+        background(STYLE.colors.sky);
+        
+        // Draw distant background buildings
+        for (const building of backgroundBuildings) {
+          const relX = building.x - cameraX * 0.3; // Parallax effect
+          if (relX + building.w < 0 || relX > width) continue; // Skip if off-screen
+          push();
+          // Make background buildings darker/desaturated
+          fill(lerpColor(color(building.color), color(30, 30, 50), 0.5));
+          noStroke();
+          rect(relX, building.y, building.w, building.h);
+          pop();
+        }
+        
+        // Draw stylized clouds instead of using images
+        for (const c of clouds) {
+          const sx = c.x - cameraX * c.speedFactor;
+          if (sx + 100 < 0 || sx > width + 100) continue; // Skip if off-screen
+          drawStylizedCloud(sx, c.y, 40 * c.size);
+        }
+        
+        // Draw foreground buildings
+        for (const building of foregroundBuildings) {
+          const relX = building.x - cameraX * 0.8; // Less parallax for foreground
+          if (relX + building.w < 0 || relX > width) continue; // Skip if off-screen
+          push();
+          translate(relX - building.x, 0); // Transform to building position
+          drawBuilding(building);
+          pop();
+        }
+        
+        // Draw road & sidewalk at bottom
+        push();
+        translate(-cameraX, -cameraY);
+        fill(STYLE.colors.roadColor);
+        noStroke();
+        rect(0, height - 30, LEVEL_LENGTH, 30);
+        
+        fill(STYLE.colors.sidewalkColor);
+        rect(0, height - 50, LEVEL_LENGTH, 20);
+        
+        // Draw road lines
+        stroke(255);
+        strokeWeight(3);
+        const dashLength = 30;
+        const dashGap = 20;
+        for (let x = 0; x < LEVEL_LENGTH; x += dashLength + dashGap) {
+          line(x, height - 15, x + dashLength, height - 15);
+        }
+        pop();
+      }
+
       function draw() {
         // ── log whenever gameState changes ──
         if (gameState !== _prevState) {
           console.log(`[DEBUG] STATE: ${_prevState} → ${gameState}`);
           _prevState = gameState;
         }
-        background("#63A0F9");
-        drawClouds();
+        drawCityBackground();
+        // drawClouds(); // Replaced by our procedural cloud drawing
 
         if (gameState === "start") {
           displayStartScreen();
@@ -1202,84 +1427,6 @@ window.addEventListener('message', function(event) {
       }
 
       function drawPlatforms() {
-        // Draw difficulty-based trail particles for platforms in later zones
-        // This runs once per frame before drawing platforms
-        platforms.forEach((p) => {
-          // Only create trail particles for platforms that are within view
-          if (p.x + p.w < cameraX || p.x > cameraX + width) {
-            return; // Skip off-screen platforms
-          }
-
-          // Create difficulty trail particles based on zone progression
-          if (p.zoneDifficulty > 0.4 && frameCount % 10 === 0) {
-            const difficultyIntensity = map(p.zoneDifficulty, 0.4, 1.0, 0.2, 1.0);
-
-            // Create different trail effects based on platform type and difficulty
-            if (random() < difficultyIntensity * 0.4) {
-              let particleColor;
-
-              // Use different colors based on platform type
-              switch (p.type) {
-                case "bouncy":
-                  particleColor = color(255, 240, 80, 100);
-                  break;
-                case "moving":
-                  particleColor = color(80, 180, 255, 100);
-                  break;
-                case "_deprecated_vanishing_": // This case should never be hit
-                  particleColor = color(220, 220, 255, 100);
-                  break;
-                case "crumbling":
-                  particleColor = color(220, 170, 120, 100);
-                  break;
-                default:
-                  particleColor = color(200, 200, 200, 80);
-              }
-
-              // Create different particle effects based on difficulty level
-              if (p.zoneDifficulty > 0.8) {
-                // Advanced zone: Intense particles
-                particles.push({
-                  x: p.x + random(p.w),
-                  y: p.y + random(-3, 0),
-                  vx: random(-0.5, 0.5),
-                  vy: random(-0.8, -0.4),
-                  color: particleColor,
-                  size: random(2, 4) * difficultyIntensity,
-                  life: 20 * difficultyIntensity,
-                  maxLife: 20 * difficultyIntensity,
-                  type: "sparkle",
-                });
-              } else if (p.zoneDifficulty > 0.6) {
-                // Mid-game: Medium particles
-                particles.push({
-                  x: p.x + random(p.w),
-                  y: p.y + random(p.h),
-                  vx: random(-0.3, 0.3),
-                  vy: random(-0.6, -0.2),
-                  color: particleColor,
-                  size: random(1.5, 3) * difficultyIntensity,
-                  life: 15 * difficultyIntensity,
-                  maxLife: 15 * difficultyIntensity,
-                  type: "default",
-                });
-              } else {
-                // Early zones: Subtle particles
-                particles.push({
-                  x: p.x + random(p.w),
-                  y: p.y + p.h - 2,
-                  vx: random(-0.2, 0.2),
-                  vy: random(-0.4, -0.1),
-                  color: particleColor,
-                  size: random(1, 2) * difficultyIntensity,
-                  life: 10 * difficultyIntensity,
-                  maxLife: 10 * difficultyIntensity,
-                });
-              }
-            }
-          }
-        });
-
         // Update crumbling platforms first
         for (let i = platforms.length - 1; i >= 0; i--) {
           const p = platforms[i];
@@ -1288,40 +1435,7 @@ window.addEventListener('message', function(event) {
 
             // Create falling debris when timer expires
             if (p.crumbleTimer === 0) {
-              // Generate debris particles
-              for (let j = 0; j < 30; j++) {
-                particles.push({
-                  x: p.x + random(p.w),
-                  y: p.y + random(p.h),
-                  vx: random(-3, 3),
-                  vy: random(-4, 3),
-                  color: color(p.originalColor),
-                  size: random(5, 15),
-                  life: random(40, 80),
-                  maxLife: 80,
-                  type: "debris",
-                  angle: random(TWO_PI),
-                  rotationSpeed: random(-0.15, 0.15),
-                });
-              }
-
-              // Add a dramatic burst effect
-              for (let j = 0; j < 15; j++) {
-                const angle = random(TWO_PI);
-                particles.push({
-                  x: p.x + p.w / 2,
-                  y: p.y + p.h / 2,
-                  vx: cos(angle) * random(1, 5),
-                  vy: sin(angle) * random(1, 5),
-                  color: color(255, 180, 100),
-                  size: random(10, 20),
-                  life: 15,
-                  maxLife: 15,
-                  type: "sparkle",
-                });
-              }
-
-              // Add text effect
+              // Generate a text effect for crash
               particles.push({
                 x: p.x + p.w / 2,
                 y: p.y,
@@ -1343,224 +1457,178 @@ window.addEventListener('message', function(event) {
           }
         }
 
-        // Draw all remaining platforms
+        // Draw all platforms with new Bold & Bright style
         rectMode(CORNER);
         platforms.forEach((p) => {
-          // Check if this is a tutorial platform for special rendering
+          // Skip off-screen platforms for performance
+          if (p.x + p.w < cameraX || p.x > cameraX + width) {
+            return;
+          }
+          
+          // Common platform properties
           const isTutorial = p.isTutorial === true;
-
-          // Common tutorial platform rendering before type-specific rendering
+          
+          // Calculate platform color based on type
+          let platformColor;
+          let outlineColor = "#000000";
+          let outlineWeight = 3;
+          
+          // Map platform types to Bold & Bright colors
+          switch (p.type) {
+            case "normal":
+              platformColor = STYLE.colors.cyan; // Cyan for normal platforms
+              break;
+            case "bouncy":
+              platformColor = STYLE.colors.yellow; // Yellow for bouncy platforms
+              break;
+            case "moving":
+              platformColor = STYLE.colors.blue; // Blue for moving platforms
+              break;
+            case "crumbling":
+              // Calculate how "broken" the platform is (0-1) for crumbling platforms
+              if (p.crumbleTimer > 0) {
+                const brokenness = 1 - p.crumbleTimer / p.crumbleMax;
+                platformColor = lerpColor(color(STYLE.colors.red), color("#8B4513"), brokenness);
+              } else {
+                platformColor = STYLE.colors.red; // Red for crumbling platforms
+              }
+              break;
+            default:
+              platformColor = STYLE.colors.cyan; // Default
+          }
+          
+          // Draw platform with pixel art style
+          push();
+          
+          // Add pulsing effect for tutorial platforms
           if (isTutorial) {
-            // Create periodic pulse effect for tutorial platforms
             const pulseAmount = sin(frameCount * 0.1) * 0.5 + 0.5; // 0-1 oscillation
-
-            // Draw attention-grabbing glow
-            drawingContext.shadowBlur = 15 + pulseAmount * 10;
-            drawingContext.shadowColor = "rgba(255, 255, 255, 0.7)";
-
-            // Emit subtle particles to draw attention
-            if (frameCount % 10 === 0) {
-              particles.push({
-                x: p.x + random(p.w),
-                y: p.y - 5,
-                vx: random(-0.5, 0.5),
-                vy: random(-1, -0.5),
-                color: color(255, 255, 200, 150),
-                size: random(3, 6),
-                life: 40,
-                maxLife: 40,
-                type: "sparkle",
-              });
-            }
-
+            outlineWeight = 4 + pulseAmount * 2;
+            
             // Add "NEW!" indicator text above tutorial platforms
             if (frameCount % 90 < 60) {
-              // Blink the text
-              fill(255, 255, 0);
-              stroke(0);
+              fill("#FFC110");
+              stroke("#000000");
               strokeWeight(3);
               textSize(16);
               textStyle(BOLD);
               text("NEW!", p.x + p.w / 2, p.y - 25);
               textStyle(NORMAL);
-              strokeWeight(0);
             }
           }
-
-          // Handle different platform types
-          switch (p.type) {
-            case "crumbling":
-              // Draw crumbling platform with cracks if timer is active
-              if (p.crumbleTimer > 0) {
-                // Calculate how "broken" the platform is (0-1)
-                const brokenness = 1 - p.crumbleTimer / p.crumbleMax;
-
-                // Darken and adjust color as it crumbles
-                const crackColor = lerpColor(color(p.originalColor), color(100, 60, 30), brokenness);
-                fill(crackColor);
-
-                // Draw main platform
-                stroke(0, 0, 0, 30);
-                strokeWeight(2);
-                rect(p.x, p.y, p.w, p.h);
-
-                // Draw cracks
-                stroke(0, 0, 0, 150);
-                strokeWeight(1);
-                for (let i = 0; i < 8 * brokenness; i++) {
-                  const crackX = p.x + random(p.w);
-                  const crackY = p.y + random(p.h);
-                  const crackLen = random(5, 15) * brokenness;
-                  const angle = random(TWO_PI);
-                  line(crackX, crackY, crackX + cos(angle) * crackLen, crackY + sin(angle) * crackLen);
-                }
-              } else {
-                fill(p.color);
-                stroke(0, 0, 0, 30);
-                strokeWeight(2);
-                rect(p.x, p.y, p.w, p.h);
-              }
-              break;
-
-            // Vertical platform type has been completely removed
-
-            case "moving":
-              // Store previous position before updating
-              if (p.prevX === undefined) {
-                p.prevX = p.x;
-              } else {
-                p.prevX = p.x;
-              }
-
-              // Calculate horizontal position based on sine wave
-              const horizOffset = sin(frameCount * p.speed + p.phase) * p.amplitude;
-              p.x = p.startX + horizOffset;
-
-              // Draw platform with trail effect
-              fill(p.color);
-              stroke(0, 0, 0, 30);
+          
+          // Calculate horizontal position for moving platforms
+          if (p.type === "moving") {
+            // Store previous position before updating
+            if (p.prevX === undefined) {
+              p.prevX = p.x;
+            } else {
+              p.prevX = p.x;
+            }
+            
+            // Calculate position based on sine wave
+            const horizOffset = sin(frameCount * p.speed + p.phase) * p.amplitude;
+            p.x = p.startX + horizOffset;
+            
+            // Draw direction arrow on moving platforms
+            const arrowDir = (horizOffset > 0) ? -1 : 1;
+            if (abs(horizOffset) > p.amplitude * 0.8) {
+              stroke(0);
               strokeWeight(2);
-
-              rect(p.x, p.y, p.w, p.h);
-
-              // Add horizontal movement trail particles
-              if (frameCount % 8 === 0 && abs(horizOffset) > p.amplitude * 0.6) {
-                const trailDir = horizOffset > 0 ? -1 : 1;
-                const edgeX = p.x + (trailDir > 0 ? 0 : p.w);
-
-                // Add multiple particles for a better trail effect
-                for (let i = 0; i < 2; i++) {
-                  particles.push({
-                    x: edgeX,
-                    y: p.y + random(p.h),
-                    vx: trailDir * random(0.5, 1),
-                    vy: random(-0.2, 0.2),
-                    color: color(150, 200, 255, 100),
-                    size: random(2, 5),
-                    life: 15,
-                    maxLife: 15,
-                    type: "sparkle",
-                  });
-                }
-
-                // Add occasional movement indicator when near max position
-                if (abs(horizOffset) > p.amplitude * 0.9 && random() < 0.2) {
-                  particles.push({
-                    x: p.x + (trailDir > 0 ? -15 : p.w + 15),
-                    y: p.y + p.h / 2,
-                    vx: trailDir * -0.5,
-                    vy: 0,
-                    color: color(150, 220, 255),
-                    size: 1,
-                    life: 20,
-                    maxLife: 20,
-                    type: "text",
-                    text: trailDir > 0 ? "←" : "→",
-                    textSize: 12,
-                  });
-                }
-              }
-              break;
-
-            case "bouncy":
-              // Draw bouncy platform with spring visual
-              fill(p.color);
-              stroke(0, 0, 0, 40);
-              strokeWeight(2);
-
-              // Draw main platform
-              rect(p.x, p.y, p.w, p.h);
-
-              // Draw bouncy indicators (springs)
-              const springCount = floor(p.w / 30);
-              const spacing = p.w / (springCount + 1);
-
-              for (let i = 1; i <= springCount; i++) {
-                const springX = p.x + i * spacing;
-                const compressionOffset = p.springCompression * 3;
-
-                // Draw spring coil
-                stroke(80, 80, 80);
-                strokeWeight(3);
-                const springWidth = 10;
-                const springHeight = 10 - compressionOffset;
-                const coils = 3;
-
-                beginShape();
-                for (let j = 0; j <= coils * 2; j++) {
-                  const segX = springX + (j % 2 === 0 ? -springWidth / 2 : springWidth / 2);
-                  const segY = p.y + springHeight * (j / (coils * 2));
-                  vertex(segX, segY);
-                }
-                endShape();
-
-                // Draw spring top cap
-                fill(220, 220, 0);
-                noStroke();
-                ellipse(springX, p.y, springWidth + 4, 4);
-              }
-
-              // Spring gradually decompresses if compressed
-              p.springCompression = max(0, p.springCompression - 0.5);
-              break;
-            default:
-              // Normal platform
-              fill(p.color);
-              stroke(0, 0, 0, 30);
-              strokeWeight(2);
-
-              // Add zone difficulty visual indicators for normal platforms
-              if (p.zoneDifficulty > 0.5 && !p.isTutorial) {
-                // Apply a difficulty pattern or highlight
-                const diffStripes = round(map(p.zoneDifficulty, 0.5, 1.0, 2, 5));
-                const stripeW = p.w / (diffStripes * 2 - 1);
-
-                // Draw difficulty stripes
-                for (let i = 0; i < diffStripes; i++) {
-                  const stripeFill = lerpColor(
-                    color(p.color),
-                    color(150, 150, 150),
-                    map(p.zoneDifficulty, 0.5, 1.0, 0.1, 0.3),
-                  );
-                  fill(stripeFill);
-                  rect(p.x + i * stripeW * 2, p.y, stripeW, p.h);
-                }
-
-                // Add a subtle glow intensity based on difficulty
-                if (p.zoneDifficulty > 0.7) {
-                  const glowIntensity = map(p.zoneDifficulty, 0.7, 1.0, 3, 8);
-                  drawingContext.shadowBlur = glowIntensity;
-                  drawingContext.shadowColor = "rgba(200, 200, 200, 0.3)";
-                }
-              }
-
-              rect(p.x, p.y, p.w, p.h);
+              fill(255);
+              const arrowX = p.x + (arrowDir < 0 ? p.w - 15 : 15);
+              const arrowSize = 8;
+              triangle(
+                arrowX, p.y + p.h/2,
+                arrowX + arrowDir * arrowSize, p.y + p.h/2 - arrowSize,
+                arrowX + arrowDir * arrowSize, p.y + p.h/2 + arrowSize
+              );
+            }
           }
+          
+          // Create pixel-art style platform with bold outline
+          fill(platformColor);
+          strokeWeight(outlineWeight);
+          stroke(outlineColor);
+          
+          // Draw platform base with rounded corners
+          rect(p.x, p.y, p.w, p.h, 3);
+          
+          // Add special visual effects based on platform type
+          if (p.type === "bouncy") {
+            // Draw spring pattern for bouncy platforms
+            noStroke();
+            fill(255, 255, 255, 100);
+            
+            const patternCount = floor(p.w / 20);
+            const patternWidth = p.w / patternCount;
+            
+            for (let i = 0; i < patternCount; i++) {
+              if (i % 2 === 0) {
+                const px = p.x + i * patternWidth;
+                const zigzagHeight = 8;
+                
+                // Spring zigzag pattern
+                fill(255, 255, 255, 80);
+                beginShape();
+                vertex(px, p.y + p.h - 3);
+                vertex(px + patternWidth/4, p.y + p.h - zigzagHeight);
+                vertex(px + patternWidth/2, p.y + p.h - 3);
+                vertex(px + patternWidth*3/4, p.y + p.h - zigzagHeight);
+                vertex(px + patternWidth, p.y + p.h - 3);
+                endShape();
+              }
+            }
+            
+            // Bounce compression indicator
+            if (p.springCompression > 0) {
+              const compressionLine = p.springCompression * 3;
+              stroke(255, 255, 255, 150);
+              strokeWeight(2);
+              line(p.x + 5, p.y + compressionLine, p.x + p.w - 5, p.y + compressionLine);
+            }
+            
+            // Spring gradually decompresses
+            p.springCompression = max(0, p.springCompression - 0.5);
+            
+          } else if (p.type === "crumbling" && p.crumbleTimer > 0) {
+            // Draw cracks for crumbling platforms
+            stroke(0);
+            strokeWeight(1);
+            
+            const brokenness = 1 - p.crumbleTimer / p.crumbleMax;
+            const crackCount = floor(10 * brokenness);
+            
+            // Draw pixel-style cracks
+            for (let i = 0; i < crackCount; i++) {
+              const x1 = p.x + random(p.w);
+              const y1 = p.y + random(p.h);
+              const len = random(5, 15);
+              const angle = random(TWO_PI);
+              
+              // Make straight-line cracks for pixel art style
+              const x2 = x1 + cos(angle) * len;
+              const y2 = y1 + sin(angle) * len;
+              
+              // Quantize to whole pixels for sharper look
+              line(floor(x1), floor(y1), floor(x2), floor(y2));
+            }
+            
+            // Warning effect when about to break
+            if (p.crumbleTimer < p.crumbleMax * 0.3) {
+              if (frameCount % 10 < 5) {
+                stroke(255, 0, 0);
+                strokeWeight(2);
+                noFill();
+                rect(p.x, p.y, p.w, p.h, 3);
+              }
+            }
+          }
+          
+          pop();
         });
+        
         noStroke();
-
-        // Reset shadow settings at the end of drawing platforms
-        drawingContext.shadowBlur = 0;
       }
 
       function drawThings() {
@@ -1571,54 +1639,144 @@ window.addEventListener('message', function(event) {
           const col = t.frameIndex % THING_FRAMES_PER_ROW;
           const row = Math.floor(t.frameIndex / THING_FRAMES_PER_ROW);
           
-          // In p5.js image(), source coordinates come after destination coordinates
-          // Format: image(img, dx, dy, dw, dh, sx, sy, sw, sh)
-          image(
-            sheet,
-            t.x, 
-            t.y + bob, 
-            t.size, 
-            t.size,
-            col * THING_FRAME_SIZE,
-            row * THING_FRAME_SIZE,
-            THING_FRAME_SIZE,
-            THING_FRAME_SIZE
-          );
+          // Add colorful Bold & Bright style glow effect for collected things
+          if (t.collected) {
+            push();
+            // Apply bold outline with glow effect
+            drawingContext.shadowBlur = 10;
+            drawingContext.shadowColor = STYLE.colors.yellow;
+            
+            // Add pixel-art style Bold & Bright effect
+            strokeWeight(3);
+            stroke(0);
+            
+            // Format: image(img, dx, dy, dw, dh, sx, sy, sw, sh)
+            image(
+              sheet,
+              t.x, 
+              t.y + bob, 
+              t.size, 
+              t.size,
+              col * THING_FRAME_SIZE,
+              row * THING_FRAME_SIZE,
+              THING_FRAME_SIZE,
+              THING_FRAME_SIZE
+            );
+            pop();
+            
+            // Add a shining star effect for collected things
+            if (random() < 0.05) {
+              const starX = t.x + random(-t.size/4, t.size/4);
+              const starY = t.y + bob + random(-t.size/4, t.size/4);
+              const starSize = random(5, 15);
+              
+              push();
+              fill(255, 255, 100);
+              stroke(0);
+              strokeWeight(1);
+              
+              // Draw simple 4-point star
+              beginShape();
+              for (let i = 0; i < 8; i++) {
+                const radius = i % 2 === 0 ? starSize : starSize * 0.4;
+                const angle = i * PI / 4;
+                const sx = starX + cos(angle) * radius;
+                const sy = starY + sin(angle) * radius;
+                vertex(sx, sy);
+              }
+              endShape(CLOSE);
+              pop();
+            }
+          } else {
+            // For uncollected things, draw with pixel-art style outline
+            push();
+            strokeWeight(2);
+            stroke(0);
+            
+            // Format: image(img, dx, dy, dw, dh, sx, sy, sw, sh)
+            image(
+              sheet,
+              t.x, 
+              t.y + bob, 
+              t.size, 
+              t.size,
+              col * THING_FRAME_SIZE,
+              row * THING_FRAME_SIZE,
+              THING_FRAME_SIZE,
+              THING_FRAME_SIZE
+            );
+            pop();
+          }
         });
       }
 
       function drawGoal() {
         rectMode(CORNER);
+        
+        // Bold & Bright style for the goal
+        push();
+        // Add pulsing glow effect
+        const pulseAmount = sin(frameCount * 0.1) * 0.5 + 0.5; // 0-1 oscillation
+        
+        // Draw with bold outline
         fill(goal.color);
-        rect(goal.x, goal.y, goal.w, goal.h);
+        strokeWeight(4);
+        stroke(STYLE.colors.outlineColor);
+        rect(goal.x, goal.y, goal.w, goal.h, 5); // Rounded corners
+        
+        // Draw a star pattern inside the goal
+        noStroke();
+        fill(255, 255, 255, 100 + pulseAmount * 50);
+        
+        // Draw a simple 4-point star
+        const centerX = goal.x + goal.w/2;
+        const centerY = goal.y + goal.h/2;
+        const outerRadius = min(goal.w, goal.h) * (0.4 + pulseAmount * 0.05);
+        const innerRadius = outerRadius * 0.4;
+        
+        beginShape();
+        for (let i = 0; i < 8; i++) {
+          const radius = i % 2 === 0 ? outerRadius : innerRadius;
+          const angle = i * PI / 4;
+          const sx = centerX + cos(angle) * radius;
+          const sy = centerY + sin(angle) * radius;
+          vertex(sx, sy);
+        }
+        endShape(CLOSE);
+        
+        // Add "GOAL" text
+        fill(255);
+        stroke(0);
+        strokeWeight(2);
+        textSize(14);
+        textStyle(BOLD);
+        text("GOAL", centerX, centerY);
+        textStyle(NORMAL);
+        
+        pop();
       }
 
       function drawNoggles() {
         imageMode(CENTER);
         noggles.forEach((n) => {
-          // Draw trail for active noggles
-          if (n.hasTrail && frameCount % 2 === 0) {
-            particles.push({
-              x: n.x,
-              y: n.y,
-              vx: -n.vx * 0.1,
-              vy: -n.vy * 0.1,
-              size: random(3, 8),
-              life: random(8, 15),
-              color: n.trailColor || color(255, 50, 50, 100),
-            });
-          }
-
           push();
           translate(n.x, n.y);
           rotate(n.angle);
           const sz = n.r * 14;
           const offset = (sz / 48) * 8; // 8px offset at 48px base, scales with size
 
-          // Add glow effect for noggles in flight
+          // Add Bold & Bright style glow effect for noggles
+          strokeWeight(3);
+          stroke(0);
+          
+          // Add special glow effect for noggles in flight
           if (n.hasTrail) {
             drawingContext.shadowBlur = 15;
-            drawingContext.shadowColor = "rgba(255, 50, 50, 0.5)";
+            drawingContext.shadowColor = STYLE.colors.red;
+            
+            // Add a pulsing effect
+            const pulseAmount = sin(frameCount * 0.2) * 0.1 + 1;
+            scale(pulseAmount, pulseAmount);
           }
 
           image(noggleImg, offset, offset, sz, sz);
