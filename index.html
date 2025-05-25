@@ -336,24 +336,43 @@ window.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'spriteUpdate') {
     loadImage(event.data.spritesheetDataUrl, (img) => {
       customPlayerSpriteSheet = img; // <--- store globally
-      player.spriteSheet = img;
+      
+      // Update the player object if it exists
+      if (player) {
+        player.spriteSheet = img;
+      }
+      
       // Handle custom noggles
       if (event.data.noggleDataUrl) {
         loadImage(event.data.noggleDataUrl, (nogImg) => {
           customPlayerNoggles = nogImg;
           noggleImg = nogImg; // Update immediately for current session
-          // 👇 Add this debug log here:
           console.log("Custom noggle image set!", nogImg, "Data URL:", event.data.noggleDataUrl);
         });
       }
-      // Optionally show a confirmation
+      
+      // Show confirmation message
       const confirmMsg = document.createElement('div');
       confirmMsg.textContent = "Character updated!";
       confirmMsg.style = "position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#4CAF50; color:white; padding:10px; border-radius:5px; z-index:1000";
       document.body.appendChild(confirmMsg);
-      setTimeout(() => document.body.removeChild(confirmMsg), 2000);
+      setTimeout(() => {
+        if (document.body.contains(confirmMsg)) {
+          document.body.removeChild(confirmMsg);
+        }
+      }, 2000);
+      
       // Hide the modal
-      document.getElementById('characterCreatorModal').style.display = 'none';
+      const modal = document.getElementById('characterCreatorModal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+      
+      // Remove any loading indicators
+      const loadingElement = document.getElementById('character-loading');
+      if (loadingElement) {
+        loadingElement.remove();
+      }
     });
   }
 });
@@ -2455,8 +2474,8 @@ window.addEventListener('message', function(event) {
   push();
   translate(width / 2, height * 0.35);
   
-  // Use the player's spritesheet for preview
-  const previewSpriteSheet = customPlayerSpriteSheet || nounSpriteSheet;
+  // Use the current spritesheet (prioritize custom over default)
+  const previewSpriteSheet = customPlayerSpriteSheet || (player ? player.spriteSheet : null) || nounSpriteSheet;
   if (previewSpriteSheet) {
     // Walking animation - right facing
     const animIdx = floor(frameCount / 6) % 8; // Animation speed and frames

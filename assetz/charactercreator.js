@@ -227,14 +227,6 @@ window.addEventListener('message', function(event) {
         }, parentOrigin);
         
         console.log("Character with glasses sent to parent");
-        
-        // Remove any loading indicator in the parent
-        try {
-          const loadingElement = window.parent.document.getElementById('character-loading');
-          if (loadingElement) loadingElement.remove();
-        } catch (e) {
-          console.warn("Couldn't access parent document to remove loading indicator:", e);
-        }
       };
       
       img.onerror = (err) => {
@@ -245,14 +237,6 @@ window.addEventListener('message', function(event) {
           spritesheetDataUrl: spritesheetData,
           noggleDataUrl: null
         }, parentOrigin);
-        
-        // Try to remove loading indicator despite error
-        try {
-          const loadingElement = window.parent.document.getElementById('character-loading');
-          if (loadingElement) loadingElement.remove();
-        } catch (e) {
-          console.warn("Couldn't access parent document to remove loading indicator:", e);
-        }
       };
       
       img.src = `https://dannywalter.github.io/Nounify-the-World/assetz/glasses/${glassesPart}`;
@@ -264,14 +248,6 @@ window.addEventListener('message', function(event) {
         spritesheetDataUrl: spritesheetData,
         noggleDataUrl: null
       }, parentOrigin);
-      
-      // Remove any loading indicator in the parent
-      try {
-        const loadingElement = window.parent.document.getElementById('character-loading');
-        if (loadingElement) loadingElement.remove();
-      } catch (e) {
-        console.warn("Couldn't access parent document to remove loading indicator:", e);
-      }
     }
   }
 });
