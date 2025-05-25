@@ -2472,7 +2472,7 @@ window.addEventListener('message', function(event) {
   
   // Draw character preview (animated walking character)
   push();
-  translate(width / 2, height * 0.35);
+  translate(width / 2, height * 0.34);
   
   // Use the current spritesheet (prioritize custom over default)
   const previewSpriteSheet = customPlayerSpriteSheet || (player ? player.spriteSheet : null) || nounSpriteSheet;
