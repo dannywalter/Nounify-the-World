@@ -151,7 +151,7 @@ function animate() {
     previewCtx.drawImage(
       spritesheet,
       srcX, srcY, 48, 48,
-      preview.width/2 - 120, preview.height/2 - 120, 240, 240  // Doubled size from 120x120 to 240x240
+      preview.width/2 - 230, preview.height/2 - 230, 460, 460  // Doubled size from 120x120 to 240x240
     );
   }
   
