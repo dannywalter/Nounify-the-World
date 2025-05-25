@@ -202,53 +202,58 @@ window.addEventListener('message', function(event) {
     // Generate a random character
     randomizeCharacter();
     
-    // Use the same process as useInGame but without the alert
-    const parentOrigin = getParentOrigin() || '*';
-    const spritesheetData = canvas.toDataURL('image/png');
-    const glassesPart = layerSelections['glasses'];
-    
-    if (glassesPart) {
-      console.log("Processing glasses part:", glassesPart);
-      const img = new window.Image();
-      img.crossOrigin = "Anonymous";
-      img.onload = () => {
-        console.log("Glasses image loaded successfully");
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = 48;
-        tempCanvas.height = 48;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(img, 0, 0, 48, 48, 0, 0, 48, 48);
-        const glassesDataUrl = tempCanvas.toDataURL('image/png');
-        
-        window.parent.postMessage({
-          type: 'spriteUpdate',
-          spritesheetDataUrl: spritesheetData,
-          noggleDataUrl: glassesDataUrl
-        }, parentOrigin);
-        
-        console.log("Character with glasses sent to parent");
-      };
+    // Wait for the canvas to be redrawn before capturing the data
+    setTimeout(() => {
+      console.log("Capturing spritesheet data after redraw");
       
-      img.onerror = (err) => {
-        console.error("Failed to load glasses image:", err);
-        // Still send message with spritesheet only
+      // Use the same process as useInGame but without the alert
+      const parentOrigin = getParentOrigin() || '*';
+      const spritesheetData = canvas.toDataURL('image/png');
+      const glassesPart = layerSelections['glasses'];
+      
+      if (glassesPart) {
+        console.log("Processing glasses part:", glassesPart);
+        const img = new window.Image();
+        img.crossOrigin = "Anonymous";
+        img.onload = () => {
+          console.log("Glasses image loaded successfully");
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = 48;
+          tempCanvas.height = 48;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(img, 0, 0, 48, 48, 0, 0, 48, 48);
+          const glassesDataUrl = tempCanvas.toDataURL('image/png');
+          
+          window.parent.postMessage({
+            type: 'spriteUpdate',
+            spritesheetDataUrl: spritesheetData,
+            noggleDataUrl: glassesDataUrl
+          }, parentOrigin);
+          
+          console.log("Character with glasses sent to parent");
+        };
+        
+        img.onerror = (err) => {
+          console.error("Failed to load glasses image:", err);
+          // Still send message with spritesheet only
+          window.parent.postMessage({
+            type: 'spriteUpdate',
+            spritesheetDataUrl: spritesheetData,
+            noggleDataUrl: null
+          }, parentOrigin);
+        };
+        
+        img.src = `https://dannywalter.github.io/Nounify-the-World/assetz/glasses/${glassesPart}`;
+      } else {
+        console.log("No glasses selected, sending only spritesheet");
+        // If no glasses selected, just send the spritesheet
         window.parent.postMessage({
           type: 'spriteUpdate',
           spritesheetDataUrl: spritesheetData,
           noggleDataUrl: null
         }, parentOrigin);
-      };
-      
-      img.src = `https://dannywalter.github.io/Nounify-the-World/assetz/glasses/${glassesPart}`;
-    } else {
-      console.log("No glasses selected, sending only spritesheet");
-      // If no glasses selected, just send the spritesheet
-      window.parent.postMessage({
-        type: 'spriteUpdate',
-        spritesheetDataUrl: spritesheetData,
-        noggleDataUrl: null
-      }, parentOrigin);
-    }
+      }
+    }, 100); // Wait 100ms for the canvas to be redrawn
   }
 });
 
