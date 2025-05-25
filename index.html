@@ -1061,25 +1061,6 @@ window.addEventListener('message', function(event) {
           pop();
         }
         
-        // Draw road & sidewalk at bottom
-        push();
-        translate(-cameraX, -cameraY);
-        fill(STYLE.colors.roadColor);
-        noStroke();
-        rect(0, height - 30, LEVEL_LENGTH, 30);
-        
-        fill(STYLE.colors.sidewalkColor);
-        rect(0, height - 50, LEVEL_LENGTH, 20);
-        
-        // Draw road lines
-        stroke(255);
-        strokeWeight(3);
-        const dashLength = 30;
-        const dashGap = 20;
-        for (let x = 0; x < LEVEL_LENGTH; x += dashLength + dashGap) {
-          line(x, height - 15, x + dashLength, height - 15);
-        }
-        pop();
       }
 
       function draw() {
@@ -1769,15 +1750,7 @@ window.addEventListener('message', function(event) {
           strokeWeight(3);
           stroke(0);
           
-          // Add special glow effect for noggles in flight
-          if (n.hasTrail) {
-            drawingContext.shadowBlur = 15;
-            drawingContext.shadowColor = STYLE.colors.red;
-            
-            // Add a pulsing effect
-            const pulseAmount = sin(frameCount * 0.2) * 0.1 + 1;
-            scale(pulseAmount, pulseAmount);
-          }
+        
 
           image(noggleImg, offset, offset, sz, sz);
           pop();
