@@ -34,8 +34,8 @@ async function init() {
     // Build UI selectors
     buildSelectors();
     
-    // Set initial random selections
-    randomizeCharacter();
+    // Set initial random selections - await this since randomizeCharacter is now async
+    await randomizeCharacter();
     
     // Start animation
     animate();
@@ -86,7 +86,7 @@ function buildSelectors() {
 }
 
 // Random character generation
-function randomizeCharacter() {
+async function randomizeCharacter() {
   parts.forEach(part => {
     const select = document.getElementById(`${part}-select`);
     if (select && select.options.length) {
@@ -96,7 +96,8 @@ function randomizeCharacter() {
     }
   });
   
-  redrawLayers();
+  // Wait for redraw to complete
+  await redrawLayers();
 }
 
 // Load an image with proper cross-origin settings
