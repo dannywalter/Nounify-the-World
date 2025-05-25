@@ -10,6 +10,9 @@
     <!-- Farcade SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@farcade/game-sdk@latest/dist/index.min.js"></script>
     <!-- Keyboard Input Tracker (Inline) -->
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Londrina+Solid&family=Press+Start+2P&display=swap" rel="stylesheet">
     <script>
       // KeyTracker - A simple module to track key states regardless of canvas focus
       class KeyTracker {
@@ -168,6 +171,18 @@
       .p5_loading.loaded {
         opacity: 0;
       }
+
+      .londrina-solid-regular {
+  font-family: "Londrina Solid", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.press-start-2p-regular {
+  font-family: "Press Start 2P", system-ui;
+  font-weight: 400;
+  font-style: normal;
+}
     </style>
   </head>
   <body>
@@ -2457,61 +2472,97 @@ window.addEventListener('message', function(event) {
       }
 
       function displayStartScreen() {
-  // 1️⃣ draw the full‑canvas background image
+  // 1️⃣ Draw the full‑canvas background image
   push();
   imageMode(CORNER);
   noTint();
   image(titleBg, 0, 0, width, height);
   pop();
-  
+
   // ===== CHARACTER PREVIEW SECTION =====
-  // Create semi-transparent area for character preview
   fill(0, 0, 0, 80);
   rectMode(CENTER);
-  rect(width / 2, height * 0.35, 200, 200, 10);
-  
+  rect(width / 2, height * 0.25, 200, 200, 0); // Square edges for preview box
+
   // Draw character preview (animated walking character)
   push();
-  translate(width / 2, height * 0.34);
-  
-  // Use the current spritesheet (prioritize custom over default)
+  translate(width / 2, height * 0.25);
   const previewSpriteSheet = customPlayerSpriteSheet || (player ? player.spriteSheet : null) || nounSpriteSheet;
   if (previewSpriteSheet) {
-    // Walking animation - right facing
-    const animIdx = floor(frameCount / 6) % 8; // Animation speed and frames
-    const row = 0; // Walk animation row
+    const animIdx = floor(frameCount / 6) % 8;
+    const row = 0;
     const sx = animIdx * FRAME_WIDTH;
     const sy = row * FRAME_HEIGHT;
-    
-    // Draw at a good preview size
     image(previewSpriteSheet, 0, 0, 200, 200, sx, sy, FRAME_WIDTH, FRAME_HEIGHT);
   } else {
-    // Fallback if spritesheet isn't loaded
     fill(255, 0, 0);
     rect(0, 0, 48, 48);
   }
   pop();
-  
-  // ===== CHARACTER BUTTONS SECTION =====
-  // Create "Randomize" button
-  fill(STYLE.colors.blue);
-  stroke(0);
-  strokeWeight(3);
+
+  // ===== PIXEL-STYLE BUTTONS SECTION =====
+  textFont("Press Start 2P");
+  textSize(16);
   rectMode(CENTER);
-  rect(width / 2 - 70, height * 0.5, 120, 45, 10);
-  
-  // Create "Customize" button
-  fill(STYLE.colors.yellow);
-  rect(width / 2 + 70, height * 0.5, 120, 45, 10);
-  
-  // Button text
-  fill(255);
-  strokeWeight(2);
-  textSize(18);
+  strokeWeight(4);
+
+  // Button dimensions
+  let btnW = 220, btnH = 54, iconSize = 32;
+  let btnX = width / 2; // Centered horizontally
+  let btnYStart = height * 0.5; // Starting Y position
+  let btnSpacing = 80; // Spacing between buttons
+
+  // --- RANDOMIZE BUTTON ---
+  let btnY1 = btnYStart;
+  fill("#FF9DAE");
+  stroke("#1E2761");
+  rect(btnX, btnY1, btnW, btnH, 0); // Square edges
+
+  // Button label
+  fill("#1E2761");
+  noStroke();
+  textAlign(LEFT, CENTER);
+  text("Randomize", btnX - btnW / 2 + 18, btnY1);
+
+  // Emoji icon (🎲)
   textAlign(CENTER, CENTER);
-  text("RANDOMIZE", width / 2 - 70, height * 0.5);
-  text("CUSTOMIZE", width / 2 + 70, height * 0.5);
-  
+  textSize(28);
+  text("🎲", btnX + btnW / 2 - iconSize / 2, btnY1);
+
+  // --- CUSTOMIZE BUTTON ---
+  let btnY2 = btnY1 + btnSpacing;
+  fill("#FFC110");
+  stroke("#1E2761");
+  rect(btnX, btnY2, btnW, btnH, 0); // Square edges
+
+  fill("#1E2761");
+  noStroke();
+  textSize(16);
+  textAlign(LEFT, CENTER);
+  text("Customize", btnX - btnW / 2 + 18, btnY2);
+
+  // Emoji icon (🛠️)
+  textAlign(CENTER, CENTER);
+  textSize(28);
+  text("🛠️", btnX + btnW / 2 - iconSize / 2, btnY2);
+
+  // --- START BUTTON ---
+  let btnY3 = btnY2 + btnSpacing;
+  fill("#1929F4");
+  stroke("#1E2761");
+  rect(btnX, btnY3, btnW, btnH, 0); // Square edges
+
+  fill("#fff");
+  noStroke();
+  textSize(16);
+  textAlign(LEFT, CENTER);
+  text("Start", btnX - btnW / 2 + 18, btnY3);
+
+  // Emoji icon (🚀)
+  textAlign(CENTER, CENTER);
+  textSize(28);
+  text("🚀", btnX + btnW / 2 - iconSize / 2, btnY3);
+
   // Reset styles
   strokeWeight(1);
   rectMode(CORNER);
@@ -2681,106 +2732,102 @@ window.addEventListener('message', function(event) {
 }
 
       function mousePressed() {
-  // Check if this is actually a touch event on mobile
-  if (touches && touches.length > 0) {
-    return false; // Skip processing if it's actually a touch event
-  }
-
   // Always ensure keyboard focus on all mouse clicks
   document.querySelector("canvas").focus();
 
+  // Handle touch events as mouse clicks
+  if (touches && touches.length > 0) {
+    const t = touches[0];
+    mouseX = t.x;
+    mouseY = t.y;
+  }
+
   if (gameState === "start") {
+    // Button dimensions
+    const btnW = 220, btnH = 54;
+    const btnX = width / 2; // Centered horizontally
+    const btnY1 = height * 0.5; // Randomize button
+    const btnY2 = btnY1 + 80; // Customize button
+    const btnY3 = btnY2 + 80; // Start button
+
     // Check for RANDOMIZE button click
     if (
-      mouseX > width / 2 - 130 && mouseX < width / 2 - 10 &&
-      mouseY > height * 0.5 - 22.5 && mouseY < height * 0.5 + 22.5
+      mouseX > btnX - btnW / 2 && mouseX < btnX + btnW / 2 &&
+      mouseY > btnY1 - btnH / 2 && mouseY < btnY1 + btnH / 2
     ) {
-      // Generate new random character
       generateRandomCharacter();
       return false;
     }
-    
+
     // Check for CUSTOMIZE button click
     if (
-      mouseX > width / 2 + 10 && mouseX < width / 2 + 130 &&
-      mouseY > height * 0.5 - 22.5 && mouseY < height * 0.5 + 22.5
+      mouseX > btnX - btnW / 2 && mouseX < btnX + btnW / 2 &&
+      mouseY > btnY2 - btnH / 2 && mouseY < btnY2 + btnH / 2
     ) {
       document.getElementById('characterCreatorModal').style.display = 'block';
       return false;
     }
 
-    // Any other click on start screen starts the game
-    initializeGame();
-    gameState = "playing";
-    return false;
+    // Check for START button click
+    if (
+      mouseX > btnX - btnW / 2 && mouseX < btnX + btnW / 2 &&
+      mouseY > btnY3 - btnH / 2 && mouseY < btnY3 + btnH / 2
+    ) {
+      initializeGame();
+      gameState = "playing";
+      return false;
+    }
   }
 
   if (gameState === "playing") {
-    // Use our improved throw handler
     handleThrowInput(mouseX, mouseY);
   }
   return false; // Prevent default
 }
 
       function touchStarted() {
-  // If the character creator modal is open, do nothing
-  if (document.getElementById('characterCreatorModal').style.display === 'block') {
-    return false;
-  }
-
   if (gameState === "start" && touches.length > 0) {
     const t = touches[0];
-    
-    // Check for "Randomize" button tap
+
+    // Button dimensions
+    const btnW = 220, btnH = 54;
+    const btnX = width / 2; // Centered horizontally
+    const btnY1 = height * 0.5; // Randomize button
+    const btnY2 = btnY1 + 80; // Customize button
+    const btnY3 = btnY2 + 80; // Start button
+
+    // Check for RANDOMIZE button tap
     if (
-      t.x > width / 2 - 130 && t.x < width / 2 - 10 &&
-      t.y > height * 0.5 - 22.5 && t.y < height * 0.5 + 22.5
+      t.x > btnX - btnW / 2 && t.x < btnX + btnW / 2 &&
+      t.y > btnY1 - btnH / 2 && t.y < btnY1 + btnH / 2
     ) {
-      // Generate new random character
       generateRandomCharacter();
       return false;
     }
-    
-    // Check for "Customize" button tap
+
+    // Check for CUSTOMIZE button tap
     if (
-      t.x > width / 2 + 10 && t.x < width / 2 + 130 &&
-      t.y > height * 0.5 - 22.5 && t.y < height * 0.5 + 22.5
+      t.x > btnX - btnW / 2 && t.x < btnX + btnW / 2 &&
+      t.y > btnY2 - btnH / 2 && t.y < btnY2 + btnH / 2
     ) {
       document.getElementById('characterCreatorModal').style.display = 'block';
-      return false; // Prevent further processing
+      return false;
     }
 
-    // If not touching buttons, start the game
-    initializeGame();
-    gameState = "playing";
-    // Also focus canvas on touch start to enable keyboard fallbacks
-    document.querySelector("canvas").focus();
-    return false;
+    // Check for START button tap
+    if (
+      t.x > btnX - btnW / 2 && t.x < btnX + btnW / 2 &&
+      t.y > btnY3 - btnH / 2 && t.y < btnY3 + btnH / 2
+    ) {
+      initializeGame();
+      gameState = "playing";
+      return false;
+    }
   }
 
   if (gameState === "playing") {
     const t = touches[touches.length - 1];
-
-    // Store the touch ID to track it
-    if (t && t.id !== undefined) {
-      activeTouchIds[t.id] = {
-        startX: t.x,
-        startY: t.y,
-        time: millis(),
-      };
-    }
-
-    if (dist(t.x, t.y, jumpBtn.x, jumpBtn.y) <= jumpBtn.r) {
-      jumpBufferTimer = 6;
-      tryPerformJump();
-      return false;
-    }
-
-    // Use our improved throw handler - only on touchStart
-    if (handleThrowInput(t.x, t.y)) {
-      return false;
-    }
-
+    handleThrowInput(t.x, t.y);
     return false;
   }
   return false;
