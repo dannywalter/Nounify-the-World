@@ -197,6 +197,8 @@ function useInGame() {
 // Listen for requests to generate random characters from the parent window
 window.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'generateRandom') {
+    console.log("Received generateRandom message in character creator");
+    
     // Generate a random character
     randomizeCharacter();
     
@@ -206,26 +208,56 @@ window.addEventListener('message', function(event) {
     const glassesPart = layerSelections['glasses'];
     
     if (glassesPart) {
+      console.log("Processing glasses part:", glassesPart);
       const img = new window.Image();
       img.crossOrigin = "Anonymous";
       img.onload = () => {
+        console.log("Glasses image loaded successfully");
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = 48;
         tempCanvas.height = 48;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(img, 0, 0, 48, 48, 0, 0, 48, 48);
         const glassesDataUrl = tempCanvas.toDataURL('image/png');
+        
         window.parent.postMessage({
           type: 'spriteUpdate',
           spritesheetDataUrl: spritesheetData,
           noggleDataUrl: glassesDataUrl
         }, parentOrigin);
         
+        console.log("Character with glasses sent to parent");
+        
         // Remove any loading indicator in the parent
-        window.parent.document.getElementById('character-loading')?.remove();
+        try {
+          const loadingElement = window.parent.document.getElementById('character-loading');
+          if (loadingElement) loadingElement.remove();
+        } catch (e) {
+          console.warn("Couldn't access parent document to remove loading indicator:", e);
+        }
       };
+      
+      img.onerror = (err) => {
+        console.error("Failed to load glasses image:", err);
+        // Still send message with spritesheet only
+        window.parent.postMessage({
+          type: 'spriteUpdate',
+          spritesheetDataUrl: spritesheetData,
+          noggleDataUrl: null
+        }, parentOrigin);
+        
+        // Try to remove loading indicator despite error
+        try {
+          const loadingElement = window.parent.document.getElementById('character-loading');
+          if (loadingElement) loadingElement.remove();
+        } catch (e) {
+          console.warn("Couldn't access parent document to remove loading indicator:", e);
+        }
+      };
+      
       img.src = `https://dannywalter.github.io/Nounify-the-World/assetz/glasses/${glassesPart}`;
     } else {
+      console.log("No glasses selected, sending only spritesheet");
       // If no glasses selected, just send the spritesheet
       window.parent.postMessage({
         type: 'spriteUpdate',
@@ -234,7 +266,12 @@ window.addEventListener('message', function(event) {
       }, parentOrigin);
       
       // Remove any loading indicator in the parent
-      window.parent.document.getElementById('character-loading')?.remove();
+      try {
+        const loadingElement = window.parent.document.getElementById('character-loading');
+        if (loadingElement) loadingElement.remove();
+      } catch (e) {
+        console.warn("Couldn't access parent document to remove loading indicator:", e);
+      }
     }
   }
 });
