@@ -2438,89 +2438,90 @@ window.addEventListener('message', function(event) {
       }
 
       function displayStartScreen() {
-        // 1️⃣ draw the full‑canvas background image
-        push();
-        imageMode(CORNER);
-        noTint();
-        image(titleBg, 0, 0, width, height);
-        pop();
-        noStroke();
-fill(0, 0, 0, 100);
-rect(width / 2 - 100, height / 2 + 100, 200, 40, 10);
-fill(255, 255, 100);
-textSize(20);
-text("Customize Character", width / 2, height / 2 + 120);
+  // 1️⃣ draw the full‑canvas background image
+  push();
+  imageMode(CORNER);
+  noTint();
+  image(titleBg, 0, 0, width, height);
+  pop();
+  
+  // ===== CHARACTER PREVIEW SECTION =====
+  // Create semi-transparent area for character preview
+  fill(0, 0, 0, 80);
+  rectMode(CENTER);
+  rect(width / 2, height * 0.35, 200, 200, 10);
+  
+  // Draw character preview (animated walking character)
+  push();
+  translate(width / 2, height * 0.35);
+  
+  // Use the player's spritesheet for preview
+  const previewSpriteSheet = customPlayerSpriteSheet || nounSpriteSheet;
+  if (previewSpriteSheet) {
+    // Walking animation - right facing
+    const animIdx = floor(frameCount / 6) % 8; // Animation speed and frames
+    const row = 0; // Walk animation row
+    const sx = animIdx * FRAME_WIDTH;
+    const sy = row * FRAME_HEIGHT;
+    
+    // Draw at a good preview size
+    image(previewSpriteSheet, 0, 0, 120, 120, sx, sy, FRAME_WIDTH, FRAME_HEIGHT);
+  } else {
+    // Fallback if spritesheet isn't loaded
+    fill(255, 0, 0);
+    rect(0, 0, 48, 48);
+  }
+  pop();
+  
+  // ===== CHARACTER BUTTONS SECTION =====
+  // Create "Randomize" button
+  fill(STYLE.colors.blue);
+  stroke(0);
+  strokeWeight(3);
+  rectMode(CENTER);
+  rect(width / 2 - 70, height * 0.5, 120, 45, 10);
+  
+  // Create "Customize" button
+  fill(STYLE.colors.yellow);
+  rect(width / 2 + 70, height * 0.5, 120, 45, 10);
+  
+  // Button text
+  fill(255);
+  strokeWeight(2);
+  textSize(18);
+  textAlign(CENTER, CENTER);
+  text("RANDOMIZE", width / 2 - 70, height * 0.5);
+  text("CUSTOMIZE", width / 2 + 70, height * 0.5);
+  
+  // Reset styles
+  strokeWeight(1);
+  rectMode(CORNER);
+  
+  // calculate Y positions
+  const startY = height - 10; // bottom edge for "Tap to Start"
+  const throwY = startY - 50; // throw Noggles
+  const jumpY = startY - 75; // jump
+  const moveY = startY - 100; // move left/right
 
-        // calculate Y positions
-        const startY = height - 10; // bottom edge for “Tap to Start”
-        const throwY = startY - 50; // throw Noggles
-        const jumpY = startY - 75; // jump
-        const moveY = startY - 100; // move left/right
+  // — Instructions just above the start prompt —
+  textFont("Roboto");
+  textSize(20);
+  fill("#000000");
+  textStyle(BOLD);
+  textAlign(CENTER, CENTER);
+  text("← → or A / D: Move", width / 2, moveY - 80);
+  text("↑ or W: Jump", width / 2, jumpY - 80);
+  text("Click / Tap to Throw Noggles", width / 2, throwY - 80);
 
-        // — Instructions just above the start prompt —
-        textFont("Roboto");
-        textSize(20);
-        fill("#000000");
-        textStyle(BOLD);
-        textAlign(CENTER, CENTER);
-        text("← → or A / D: Move", width / 2, moveY - 80);
-        text("↑ or W: Jump", width / 2, jumpY - 80);
-        text("Click / Tap to Throw Noggles", width / 2, throwY - 80);
+  // Reset alignment
+  textAlign(CENTER, CENTER);
 
-        // Add debug instructions (smaller text, less prominent)
-        textSize(14);
-        fill("#AAAAAA");
-        text("Press D for debug mode (with zone teleport)", width / 2, moveY - 110);
-
-        // Add platform type explanations
-        textSize(16);
-        fill("#FFFFFF");
-        text("Platform Types:", width / 2, height / 2 - 60);
-
-        textSize(14);
-        textAlign(LEFT, CENTER);
-        const platformInfoX = width / 2 - 120;
-
-        // Normal platforms
-        fill(200, 200, 200);
-        rect(platformInfoX, height / 2 - 30, 30, 10);
-        fill("#FFFFFF");
-        text("Regular platforms", platformInfoX + 40, height / 2 - 25);
-
-        // Bouncy platforms
-        fill(255, 240, 80);
-        rect(platformInfoX, height / 2 - 5, 30, 10);
-        fill("#FFFFFF");
-        text("Bouncy platforms - jump higher!", platformInfoX + 40, height / 2);
-
-        // Moving platforms
-        fill(80, 180, 255);
-        rect(platformInfoX, height / 2 + 20, 30, 10);
-        fill("#FFFFFF");
-        text("Moving platforms - slide left & right", platformInfoX + 40, height / 2 + 25);
-
-        // Crumbling platforms
-        fill(200, 150, 100);
-        rect(platformInfoX, height / 2 + 45, 30, 10);
-        // Draw cracks
-        stroke(100, 60, 40);
-        strokeWeight(1);
-        line(platformInfoX + 10, height / 2 + 70, platformInfoX + 20, height / 2 + 75);
-        line(platformInfoX + 15, height / 2 + 70, platformInfoX + 25, height / 2 + 76);
-        noStroke();
-        fill("#FFFFFF");
-        text("Crumbling platforms - fall when stepped on", platformInfoX + 40, height / 2 + 75);
-
-        // Reset alignment
-        textAlign(CENTER, CENTER);
-
-        // — “Start” prompt at the very bottom —
-
-        textSize(24);
-        textAlign(CENTER, BOTTOM);
-        text("Tap or Click to Start", width / 2, startY);
-        textStyle(NORMAL);
-      }
+  // — "Start" prompt at the very bottom —
+  textSize(24);
+  textAlign(CENTER, BOTTOM);
+  text("Tap or Click to Start", width / 2, startY);
+  textStyle(NORMAL);
+}
 
       function checkGoal() {
         if (isColliding(player, goal)) {
@@ -2635,38 +2636,72 @@ text("Customize Character", width / 2, height / 2 + 120);
         }
       }
 
+      function generateRandomCharacter() {
+  // Get a reference to the character creator iframe
+  const iframe = document.getElementById('characterCreatorFrame');
+  
+  if (iframe && iframe.contentWindow) {
+    // Post a message to the character creator iframe asking for a random character
+    iframe.contentWindow.postMessage({ 
+      type: 'generateRandom' 
+    }, '*');
+    
+    // Show a loading indicator
+    const loadingMsg = document.createElement('div');
+    loadingMsg.textContent = "Generating character...";
+    loadingMsg.id = "character-loading";
+    loadingMsg.style = "position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#1929F4; color:white; padding:10px; border-radius:5px; z-index:1000";
+    document.body.appendChild(loadingMsg);
+    
+    // The response will come through the same message event listener
+    // that's already set up for the character creator
+    console.log("Requested random character from character creator");
+  } else {
+    console.error("Character creator iframe not found");
+  }
+}
+
       function mousePressed() {
-        // Check if this is actually a touch event on mobile
-        if (touches && touches.length > 0) {
-          return false; // Skip processing if it's actually a touch event
-        }
-
-        // Always ensure keyboard focus on all mouse clicks
-        document.querySelector("canvas").focus();
-
-        // 1. Check for "Customize Character" button FIRST
-  if (
-    gameState === "start" &&
-    mouseX > width / 2 - 100 && mouseX < width / 2 + 100 &&
-    mouseY > height / 2 + 100 && mouseY < height / 2 + 140
-  ) {
-    document.getElementById('characterCreatorModal').style.display = 'block';
-    return false; // Prevent further processing
+  // Check if this is actually a touch event on mobile
+  if (touches && touches.length > 0) {
+    return false; // Skip processing if it's actually a touch event
   }
 
-  // 2. Only start the game if not clicking the button
+  // Always ensure keyboard focus on all mouse clicks
+  document.querySelector("canvas").focus();
+
   if (gameState === "start") {
+    // Check for RANDOMIZE button click
+    if (
+      mouseX > width / 2 - 130 && mouseX < width / 2 - 10 &&
+      mouseY > height * 0.5 - 22.5 && mouseY < height * 0.5 + 22.5
+    ) {
+      // Generate new random character
+      generateRandomCharacter();
+      return false;
+    }
+    
+    // Check for CUSTOMIZE button click
+    if (
+      mouseX > width / 2 + 10 && mouseX < width / 2 + 130 &&
+      mouseY > height * 0.5 - 22.5 && mouseY < height * 0.5 + 22.5
+    ) {
+      document.getElementById('characterCreatorModal').style.display = 'block';
+      return false;
+    }
+
+    // Any other click on start screen starts the game
     initializeGame();
     gameState = "playing";
     return false;
   }
 
-        if (gameState === "playing") {
-          // Use our improved throw handler
-          handleThrowInput(mouseX, mouseY);
-        }
-        return false; // Prevent default
-      }
+  if (gameState === "playing") {
+    // Use our improved throw handler
+    handleThrowInput(mouseX, mouseY);
+  }
+  return false; // Prevent default
+}
 
       function touchStarted() {
   // If the character creator modal is open, do nothing
@@ -2674,19 +2709,29 @@ text("Customize Character", width / 2, height / 2 + 120);
     return false;
   }
 
-  // Check for "Customize Character" button tap FIRST
-  if (
-    gameState === "start" &&
-    touches.length > 0 &&
-    touches[0].x > width / 2 - 100 && touches[0].x < width / 2 + 100 &&
-    touches[0].y > height / 2 + 100 && touches[0].y < height / 2 + 140
-  ) {
-    document.getElementById('characterCreatorModal').style.display = 'block';
-    return false; // Prevent further processing
-  }
+  if (gameState === "start" && touches.length > 0) {
+    const t = touches[0];
+    
+    // Check for "Randomize" button tap
+    if (
+      t.x > width / 2 - 130 && t.x < width / 2 - 10 &&
+      t.y > height * 0.5 - 22.5 && t.y < height * 0.5 + 22.5
+    ) {
+      // Generate new random character
+      generateRandomCharacter();
+      return false;
+    }
+    
+    // Check for "Customize" button tap
+    if (
+      t.x > width / 2 + 10 && t.x < width / 2 + 130 &&
+      t.y > height * 0.5 - 22.5 && t.y < height * 0.5 + 22.5
+    ) {
+      document.getElementById('characterCreatorModal').style.display = 'block';
+      return false; // Prevent further processing
+    }
 
-  // Only start the game if not clicking the button
-  if (gameState === "start") {
+    // If not touching buttons, start the game
     initializeGame();
     gameState = "playing";
     // Also focus canvas on touch start to enable keyboard fallbacks

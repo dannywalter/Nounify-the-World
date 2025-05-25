@@ -194,5 +194,50 @@ function useInGame() {
   alert('Character sent to game!');
 }
 
+// Listen for requests to generate random characters from the parent window
+window.addEventListener('message', function(event) {
+  if (event.data && event.data.type === 'generateRandom') {
+    // Generate a random character
+    randomizeCharacter();
+    
+    // Use the same process as useInGame but without the alert
+    const parentOrigin = getParentOrigin() || '*';
+    const spritesheetData = canvas.toDataURL('image/png');
+    const glassesPart = layerSelections['glasses'];
+    
+    if (glassesPart) {
+      const img = new window.Image();
+      img.crossOrigin = "Anonymous";
+      img.onload = () => {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 48;
+        tempCanvas.height = 48;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(img, 0, 0, 48, 48, 0, 0, 48, 48);
+        const glassesDataUrl = tempCanvas.toDataURL('image/png');
+        window.parent.postMessage({
+          type: 'spriteUpdate',
+          spritesheetDataUrl: spritesheetData,
+          noggleDataUrl: glassesDataUrl
+        }, parentOrigin);
+        
+        // Remove any loading indicator in the parent
+        window.parent.document.getElementById('character-loading')?.remove();
+      };
+      img.src = `https://dannywalter.github.io/Nounify-the-World/assetz/glasses/${glassesPart}`;
+    } else {
+      // If no glasses selected, just send the spritesheet
+      window.parent.postMessage({
+        type: 'spriteUpdate',
+        spritesheetDataUrl: spritesheetData,
+        noggleDataUrl: null
+      }, parentOrigin);
+      
+      // Remove any loading indicator in the parent
+      window.parent.document.getElementById('character-loading')?.remove();
+    }
+  }
+});
+
 // Start initialization
 init();
